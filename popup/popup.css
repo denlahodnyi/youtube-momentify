@@ -1,0 +1,72 @@
+/* TODO: add css reset */
+@import url('./reset.css');
+
+button {
+  all: unset;
+  cursor: pointer;
+}
+
+ul,
+ol {
+  margin: 0;
+  padding: 0;
+  list-style-type: none;
+}
+
+:root {
+  --clr-background: #f4efec;
+  --clr-foreground: #25211d;
+  --clr-border: #a39f9b;
+  --clr-card: #fbfbfa;
+}
+
+body {
+  width: 31.25rem;
+  margin: 0;
+  padding: 10px;
+  font-family: Arial, sans-serif;
+  color: var(--clr-foreground);
+  background-color: var(--clr-background);
+}
+
+.video-container {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+.video__header {
+  /* &::marker {
+    display: block;
+  } */
+}
+.video__title {
+  display: inline;
+}
+.video__list {
+  & li {
+    padding-block: 0.625rem;
+    &:not(:first-child) {
+      border-top: 1px solid var(--clr-border);
+    }
+    /* &:nth-child(odd) {
+      background-color: var(--clr-card);
+    } */
+  }
+}
+
+.bm {
+  inline-size: 100%;
+  display: flex;
+  gap: 0.625rem;
+}
+.bm__color {
+  display: block;
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+  border-radius: 50%;
+}
+.bm__title {
+  margin-block-end: 0.625rem;
+}
+.bm__action {
+}
