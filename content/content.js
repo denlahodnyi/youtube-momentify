@@ -1,7 +1,7 @@
 console.log('SCRIPT RUNNING');
 const BOOKMARK_BTN_ID = 'yt-momentify-bookmark-btn';
 const TIMESTAMPS_CONTAINER_ID = 'momentify-bookmarks-container';
-const MARK_DEFAULT_COLOR = '#f45b19';
+const MARK_DEFAULT_COLOR = '#FF7F50';
 const videoPagePattern = new URLPattern('https://*.youtube.com/watch?v=:id');
 let lastUrl = location.href;
 let videoId = getVideoIdFromUrl(lastUrl);
@@ -28,6 +28,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (video) {
         video.currentTime = message.time;
         video.play();
+      }
+      break;
+    }
+    case 'CONTENT/UPDATE_BOOKMARK_COLOR': {
+      const $mark = document.getElementById(
+        `momentify-bookmark-${message.bookmarkId}`
+      );
+
+      if ($mark) {
+        $mark.style.backgroundColor = message.color;
       }
       break;
     }

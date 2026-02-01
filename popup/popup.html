@@ -11,6 +11,67 @@
     <!-- <h1>Hello Extensions</h1> -->
     <div id="home"></div>
 
+    <div id="bookmark-color-picker" popover="auto" class="bm-color-picker">
+      <form class="bm-color-picker__form">
+        <label
+          class="bm-color-picker__color-option"
+          style="background-color: #008b8b"
+        >
+          <span class="scr-only">DarkCyan</span>
+          <input type="radio" name="color" value="#008B8B" class="scr-only" />
+        </label>
+        <label
+          class="bm-color-picker__color-option"
+          style="background-color: #00bfff"
+        >
+          <span class="scr-only">DeepSkyBlue</span>
+          <input type="radio" name="color" value="#00BFFF" class="scr-only" />
+        </label>
+        <label
+          class="bm-color-picker__color-option"
+          style="background-color: #7b68ee"
+        >
+          <span class="scr-only">MediumSlateBlue</span>
+          <input type="radio" name="color" value="#7B68EE" class="scr-only" />
+        </label>
+        <label
+          class="bm-color-picker__color-option"
+          style="background-color: #90ee90"
+        >
+          <span class="scr-only">LightGreen</span>
+          <input type="radio" name="color" value="#90EE90" class="scr-only" />
+        </label>
+        <label
+          class="bm-color-picker__color-option"
+          style="background-color: #ff7f50"
+        >
+          <span class="scr-only">Coral</span>
+          <input type="radio" name="color" value="#FF7F50" class="scr-only" />
+        </label>
+        <label
+          class="bm-color-picker__color-option"
+          style="background-color: #ffdead"
+        >
+          <span class="scr-only">NavajoWhite</span>
+          <input type="radio" name="color" value="#FFDEAD" class="scr-only" />
+        </label>
+        <label
+          class="bm-color-picker__color-option"
+          style="background-color: #ee82ee"
+        >
+          <span class="scr-only">Violet</span>
+          <input type="radio" name="color" value="#EE82EE" class="scr-only" />
+        </label>
+        <label
+          class="bm-color-picker__color-option"
+          style="background-color: #ffff00"
+        >
+          <span class="scr-only">Yellow</span>
+          <input type="radio" name="color" value="#FFFF00" class="scr-only" />
+        </label>
+      </form>
+    </div>
+
     <template id="video-template">
       <div data-component="video-container" class="video-container">
         <details data-component="video" class="video">
@@ -58,7 +119,11 @@
     <template id="bookmark-template">
       <div data-component="bookmark" class="bm">
         <div data-component="bookmark-col-1">
-          <span data-component="bookmark-color" class="bm__color"></span>
+          <button
+            data-component="bookmark-color"
+            class="bm__color"
+            aria-label="Select color"
+          ></button>
         </div>
         <div data-component="bookmark-col-2">
           <h3 data-component="bookmark-title" class="bm__title"></h3>

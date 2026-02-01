@@ -1,4 +1,4 @@
-const MARK_COLOR = '#f45b19';
+const MARK_COLOR = '#FF7F50';
 const BOOKMARKS_INDEX = 'bm_videoId';
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -10,6 +10,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case 'CREATE_BOOKMARK': {
         const db = await openDatabase();
         const item = await createBookmark(db, message);
+        // TODO: rename item to bookmark
         sendResponse({ success: true, item });
         break;
       }
@@ -25,10 +26,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ success: true, list: bookmarks });
         break;
       }
+      case 'GET_BOOKMARK': {
+        const db = await openDatabase();
+        const bookmark = await getBookmark(db, message.bookmarkId);
+        sendResponse({ success: true, bookmark });
+        break;
+      }
       case 'GET_VIDEOS_TOTAL_COUNT': {
         const db = await openDatabase();
         const count = await getVideosTotalCount(db);
         sendResponse({ success: true, count });
+        break;
+      }
+      case 'UPDATE_BOOKMARK': {
+        const db = await openDatabase();
+        await updateBookmark(db, message.bookmark);
+        sendResponse({ success: true });
         break;
       }
       case 'DELETE_BOOKMARK': {
@@ -179,6 +192,22 @@ function getBookmarks(db) {
   });
 }
 
+function getBookmark(db, bookmarkId) {
+  return new Promise((resolve, reject) => {
+    const t = db.transaction('bookmarks', 'readonly');
+    const bmStore = t.objectStore('bookmarks');
+    const req = bmStore.get(bookmarkId);
+
+    req.onsuccess = (e) => {
+      resolve(e.target.result);
+    };
+
+    req.onerror = (e) => {
+      reject(new Error(`Cannot find bookmark: ${bookmarkId}`));
+    };
+  });
+}
+
 function getBookmarksByVideoId(db, videoId) {
   return new Promise((resolve) => {
     const t = db.transaction(['bookmarks'], 'readonly');
@@ -201,6 +230,22 @@ function getVideosTotalCount(db) {
 
     req.onsuccess = (event) => {
       resolve(event.target.result);
+    };
+  });
+}
+
+function updateBookmark(db, bookmark) {
+  return new Promise((resolve, reject) => {
+    const t = db.transaction(['bookmarks'], 'readwrite');
+    const bmStore = t.objectStore('bookmarks');
+    const req = bmStore.put(bookmark);
+
+    req.onsuccess = () => {
+      resolve();
+    };
+
+    req.onerror = () => {
+      reject(new Error('Failed to update bookmark'));
     };
   });
 }

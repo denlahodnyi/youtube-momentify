@@ -1,3 +1,4 @@
+const MARK_DEFAULT_COLOR = '#FF7F50';
 const videoPagePattern = new URLPattern('https://*.youtube.com/watch?v=:id');
 
 (async () => {
@@ -19,6 +20,55 @@ const videoPagePattern = new URLPattern('https://*.youtube.com/watch?v=:id');
     console.error(error?.message);
   }
 })();
+
+const $colorPickerPopover = document.getElementById('bookmark-color-picker');
+let currentBookmark;
+let currentBookmarkId;
+let currentBookmarkColor;
+let $colorPopoverInvoker;
+
+$colorPickerPopover.addEventListener('beforetoggle', (e) => {
+  if (e.newState === 'open') {
+    $colorPickerPopover.querySelectorAll('input').forEach(($input) => {
+      $input.checked = false;
+
+      if ($input.value === currentBookmark.color) {
+        $input.checked = true;
+      }
+    });
+  }
+});
+
+$colorPickerPopover.firstElementChild.addEventListener('change', async (e) => {
+  $colorPopoverInvoker.style.backgroundColor = e.target.value;
+
+  const getRes = await chrome.runtime.sendMessage({
+    action: 'GET_BOOKMARK',
+    bookmarkId: currentBookmark.id,
+  });
+
+  if (getRes.bookmark) {
+    const result = await chrome.runtime.sendMessage({
+      action: 'UPDATE_BOOKMARK',
+      bookmark: { ...getRes.bookmark, color: e.target.value },
+    });
+
+    if (result.success) {
+      currentBookmark.color = e.target.value;
+      const tabs = await tabsMatchesVideo(getRes.bookmark.videoId);
+
+      if (tabs) {
+        for (const tab of tabs) {
+          chrome.tabs.sendMessage(tab.id, {
+            action: 'CONTENT/UPDATE_BOOKMARK_COLOR',
+            bookmarkId: getRes.bookmark.id,
+            color: e.target.value,
+          });
+        }
+      }
+    }
+  }
+});
 
 function createVideoElements(list) {
   const videoElements = new Set();
@@ -81,9 +131,10 @@ function createVideoElements(list) {
 function createBookmarkElement(bookmark, defaultTitle) {
   const template = document.getElementById('bookmark-template');
   const $clone = template.content.firstElementChild.cloneNode(true);
-  $clone.querySelector(
+  const $colorButton = $clone.querySelector(
     '[data-component="bookmark-color"]'
-  ).style.backgroundColor = bookmark.color;
+  );
+  $colorButton.style.backgroundColor = bookmark.color;
   $clone.querySelector('[data-component="bookmark-title"]').textContent =
     bookmark.title || defaultTitle;
   $clone.querySelector('[data-component="bookmark-timestamp"]').textContent =
@@ -143,6 +194,14 @@ function createBookmarkElement(bookmark, defaultTitle) {
         }
       }
     });
+  $colorButton.addEventListener('click', () => {
+    const $colorPickerPopover = document.getElementById(
+      'bookmark-color-picker'
+    );
+    $colorPopoverInvoker = $colorButton;
+    currentBookmark = bookmark;
+    $colorPickerPopover.togglePopover({ source: $colorButton });
+  });
 
   return $clone;
 }
@@ -186,6 +245,7 @@ async function tabsMatchesVideo(videoId) {
     url: `https://*.youtube.com/watch?v=${videoId}*`,
   });
 
+  // TODO: always return array
   if (tabs && tabs.length > 0) {
     return tabs;
   }

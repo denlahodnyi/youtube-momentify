@@ -1,4 +1,3 @@
-/* TODO: add css reset */
 @import url('./reset.css');
 
 button {
@@ -27,6 +26,22 @@ body {
   font-family: Arial, sans-serif;
   color: var(--clr-foreground);
   background-color: var(--clr-background);
+}
+
+:focus-visible {
+  outline: 2px solid blue;
+  outline-offset: 2px;
+}
+
+.scr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
 }
 
 .video-container {
@@ -60,13 +75,48 @@ body {
   gap: 0.625rem;
 }
 .bm__color {
+  position: relative;
   display: block;
   inline-size: 1.25rem;
   block-size: 1.25rem;
   border-radius: 50%;
+  &:focus-visible {
+    outline: 2px solid blue;
+    outline-offset: 2px;
+  }
+}
+.bm__color-input {
+  inset-inline-end: 0;
+  inset-block-end: 0;
 }
 .bm__title {
   margin-block-end: 0.625rem;
 }
 .bm__action {
+}
+
+.bm-color-picker {
+  position: absolute;
+  inset-inline-start: 10px;
+  position-area: inline-end;
+}
+.bm-color-picker__form {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+.bm-color-picker__color-option {
+  display: block;
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+  border: 2px solid #cecece;
+  border-radius: 50%;
+  cursor: pointer;
+  &:has(input:checked) {
+    border-color: black;
+  }
+  &:focus-within {
+    outline: 2px solid blue;
+    outline-offset: 2px;
+  }
 }
