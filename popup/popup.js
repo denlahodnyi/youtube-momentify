@@ -1,5 +1,4 @@
 const MARK_DEFAULT_COLOR = '#FF7F50';
-const videoPagePattern = new URLPattern('https://*.youtube.com/watch?v=:id');
 
 (async () => {
   try {
@@ -131,17 +130,16 @@ function createVideoElements(list) {
 function createBookmarkElement(bookmark, defaultTitle) {
   const template = document.getElementById('bookmark-template');
   const $clone = template.content.firstElementChild.cloneNode(true);
-  const $colorButton = $clone.querySelector(
-    '[data-component="bookmark-color"]'
-  );
-  $colorButton.style.backgroundColor = bookmark.color;
 
   $clone.querySelector('[data-component="bookmark-timestamp"]').textContent =
     formatTime(bookmark.time);
+
+  // Buttons
   $clone
     .querySelector('[data-component="play-btn"]')
     .addEventListener('click', async () => {
       const activeTab = await activeTabMatchesVideo(bookmark.videoId);
+      console.log(`🚀 -> createBookmarkElement -> activeTab:`, activeTab);
 
       if (activeTab) {
         chrome.tabs.sendMessage(activeTab.id, {
@@ -152,6 +150,7 @@ function createBookmarkElement(bookmark, defaultTitle) {
       }
 
       const tabs = await tabsMatchesVideo(bookmark.videoId);
+      console.log(`🚀 -> createBookmarkElement -> tabs:`, tabs);
 
       if (tabs) {
         const [tab] = tabs;
@@ -167,7 +166,7 @@ function createBookmarkElement(bookmark, defaultTitle) {
 
       // TODO: check this later
       await chrome.tabs.create({
-        url: `https://www.youtube.com/watch?v=${bookmark.videoId}&t=${bookmark.time}`,
+        url: getVideoUrlWithTime(bookmark.videoId, bookmark.time),
         active: true,
       });
     });
@@ -193,6 +192,23 @@ function createBookmarkElement(bookmark, defaultTitle) {
         }
       }
     });
+  $clone
+    .querySelector('[data-component="copy-bm-btn"]')
+    .addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(
+          getVideoUrlWithTime(bookmark.videoId, bookmark.time)
+        );
+      } catch (error) {
+        console.error(error);
+      }
+    });
+
+  // Color picker
+  const $colorButton = $clone.querySelector(
+    '[data-component="bookmark-color"]'
+  );
+  $colorButton.style.backgroundColor = bookmark.color;
   $colorButton.addEventListener('click', () => {
     const $colorPickerPopover = document.getElementById(
       'bookmark-color-picker'
@@ -202,6 +218,7 @@ function createBookmarkElement(bookmark, defaultTitle) {
     $colorPickerPopover.togglePopover({ source: $colorButton });
   });
 
+  // Title
   const $title = $clone.querySelector('[data-component="bookmark-title"]');
   const $titleInput = $clone.querySelector(
     '[data-component="bookmark-title-input"]'
@@ -234,6 +251,7 @@ function createBookmarkElement(bookmark, defaultTitle) {
     $titleCharsCount.textContent = e.target.value.length;
   });
 
+  // Note
   const $noteInput = $clone.querySelector(
     '[data-component="bookmark-note-input"]'
   );
@@ -279,14 +297,34 @@ function formatTime(timeInSec) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+function getVideoUrlWithTime(videoId, timeInSec) {
+  return `https://www.youtube.com/watch?v=${videoId}&t=${timeInSec}s`;
+}
+
+function checkVideoPageByUrl(url) {
+  const videoPagePattern = new URLPattern({
+    baseUrl: 'https://www.youtube.com',
+    pathname: '/watch',
+  });
+
+  if (videoPagePattern.test(url)) {
+    const urlObj = new URL(url);
+    const videoId = urlObj.searchParams.get('v');
+    const time =
+      urlObj.searchParams.get('t') ?? urlObj.searchParams.get('start');
+
+    return { videoId, time };
+  }
+}
+
 async function activeTabMatchesVideo(videoId) {
   const [activeTab] = await chrome.tabs.query({
     active: true,
     currentWindow: true,
   });
-  const result = videoPagePattern.exec(activeTab.url);
+  const result = checkVideoPageByUrl(activeTab.url);
 
-  if (result && result.search.groups.id === videoId) {
+  if (result?.videoId === videoId) {
     return activeTab;
   }
 }

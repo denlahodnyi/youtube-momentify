@@ -2,7 +2,6 @@ console.log('SCRIPT RUNNING');
 const BOOKMARK_BTN_ID = 'yt-momentify-bookmark-btn';
 const TIMESTAMPS_CONTAINER_ID = 'momentify-bookmarks-container';
 const MARK_DEFAULT_COLOR = '#FF7F50';
-const videoPagePattern = new URLPattern('https://*.youtube.com/watch?v=:id');
 let lastUrl = location.href;
 let videoId = getVideoIdFromUrl(lastUrl);
 
@@ -65,8 +64,8 @@ function initUI() {
 }
 
 function getVideoIdFromUrl(url) {
-  const result = videoPagePattern.exec(url);
-  return result ? result.search.groups.id : null;
+  const result = checkVideoPageByUrl(url);
+  return result?.videoId;
 }
 
 function addBookmarkButton() {
@@ -204,4 +203,20 @@ function createTimestampMark(
   //   ($bookmarksInnerContainer.clientWidth * 100) / bm.time;
   $mark.style.left = `${percent}%`;
   return $mark;
+}
+
+function checkVideoPageByUrl(url) {
+  const videoPagePattern = new URLPattern({
+    baseUrl: 'https://www.youtube.com',
+    pathname: '/watch',
+  });
+
+  if (videoPagePattern.test(url)) {
+    const urlObj = new URL(url);
+    const videoId = urlObj.searchParams.get('v');
+    const time =
+      urlObj.searchParams.get('t') ?? urlObj.searchParams.get('start');
+
+    return { videoId, time };
+  }
 }
