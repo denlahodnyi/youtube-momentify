@@ -135,8 +135,14 @@ function createBookmarkElement(bookmark, defaultTitle) {
     '[data-component="bookmark-color"]'
   );
   $colorButton.style.backgroundColor = bookmark.color;
-  $clone.querySelector('[data-component="bookmark-title"]').textContent =
-    bookmark.title || defaultTitle;
+  const $title = $clone.querySelector('[data-component="bookmark-title"]');
+  const $titleInput = $clone.querySelector(
+    '[data-component="bookmark-title-input"]'
+  );
+  const $titleCharsCount = $title.querySelector(
+    '[data-component="bookmark-title-chars-count"]'
+  );
+  $titleInput.value = bookmark.title || defaultTitle;
   $clone.querySelector('[data-component="bookmark-timestamp"]').textContent =
     formatTime(bookmark.time);
   $clone
@@ -201,6 +207,25 @@ function createBookmarkElement(bookmark, defaultTitle) {
     $colorPopoverInvoker = $colorButton;
     currentBookmark = bookmark;
     $colorPickerPopover.togglePopover({ source: $colorButton });
+  });
+  $titleInput.addEventListener('input', (e) => {
+    $titleCharsCount.textContent = e.target.value.length;
+  });
+  $titleInput.addEventListener('change', async (e) => {
+    const isValid = e.target.checkValidity();
+
+    if (isValid) {
+      const result = await chrome.runtime.sendMessage({
+        action: 'UPDATE_BOOKMARK',
+        bookmark: { ...bookmark, title: e.target.value },
+      });
+
+      if (result.success) bookmark.title = e.target.value;
+    } else {
+      const { valueMissing, tooShort } = e.target.validity;
+
+      if (valueMissing || tooShort) $titleInput.value = bookmark.title;
+    }
   });
 
   return $clone;

@@ -1,5 +1,6 @@
 const MARK_COLOR = '#FF7F50';
 const BOOKMARKS_INDEX = 'bm_videoId';
+const BOOKMARK_TITLE_CONSTRAINS = { min: 1, max: 80 };
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('sw message', message, sender);
@@ -238,6 +239,18 @@ function updateBookmark(db, bookmark) {
   return new Promise((resolve, reject) => {
     const t = db.transaction(['bookmarks'], 'readwrite');
     const bmStore = t.objectStore('bookmarks');
+
+    if (
+      bookmark.title.length < BOOKMARK_TITLE_CONSTRAINS.min ||
+      bookmark.title.length > BOOKMARK_TITLE_CONSTRAINS.max
+    ) {
+      reject(
+        new Error(
+          `Bookmark title must be between ${BOOKMARK_TITLE_CONSTRAINS.min} and ${BOOKMARK_TITLE_CONSTRAINS.max} characters`
+        )
+      );
+    }
+
     const req = bmStore.put(bookmark);
 
     req.onsuccess = () => {

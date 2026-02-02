@@ -126,7 +126,22 @@
           ></button>
         </div>
         <div data-component="bookmark-col-2">
-          <h3 data-component="bookmark-title" class="bm__title"></h3>
+          <label data-component="bookmark-title" class="bm__title">
+            <span class="scr-only">Bookmark title</span>
+            <textarea
+              data-component="bookmark-title-input"
+              name="title"
+              minlength="1"
+              maxlength="80"
+              required
+            ></textarea>
+            <span aria-live="polite" aria-atomic="false">
+              <span class="scr-only">Characters remaining</span>
+              <span data-component="bookmark-title-chars-count">0</span>/<span
+                >80</span
+              >
+            </span>
+          </label>
           <p data-component="bookmark-timestamp" class="bm__time"></p>
           <div>
             <button
