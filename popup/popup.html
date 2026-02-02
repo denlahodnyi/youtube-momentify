@@ -189,6 +189,22 @@
               </svg>
             </button>
           </div>
+          <details>
+            <summary>Toggle Note</summary>
+            <textarea
+              data-component="bookmark-note-input"
+              name="note"
+              minlength="0"
+              maxlength="200"
+              placeholder="Add a note (optional)"
+            ></textarea>
+            <span aria-live="polite" aria-atomic="false">
+              <span class="scr-only">Characters remaining</span>
+              <span data-component="bookmark-note-chars-count">0</span>/<span
+                >200</span
+              >
+            </span>
+          </details>
         </div>
       </div>
     </template>

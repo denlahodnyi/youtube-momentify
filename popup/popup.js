@@ -135,14 +135,7 @@ function createBookmarkElement(bookmark, defaultTitle) {
     '[data-component="bookmark-color"]'
   );
   $colorButton.style.backgroundColor = bookmark.color;
-  const $title = $clone.querySelector('[data-component="bookmark-title"]');
-  const $titleInput = $clone.querySelector(
-    '[data-component="bookmark-title-input"]'
-  );
-  const $titleCharsCount = $title.querySelector(
-    '[data-component="bookmark-title-chars-count"]'
-  );
-  $titleInput.value = bookmark.title || defaultTitle;
+
   $clone.querySelector('[data-component="bookmark-timestamp"]').textContent =
     formatTime(bookmark.time);
   $clone
@@ -208,10 +201,21 @@ function createBookmarkElement(bookmark, defaultTitle) {
     currentBookmark = bookmark;
     $colorPickerPopover.togglePopover({ source: $colorButton });
   });
+
+  const $title = $clone.querySelector('[data-component="bookmark-title"]');
+  const $titleInput = $clone.querySelector(
+    '[data-component="bookmark-title-input"]'
+  );
+  const $titleCharsCount = $title.querySelector(
+    '[data-component="bookmark-title-chars-count"]'
+  );
+  $titleInput.value = bookmark.title || defaultTitle;
+  $titleCharsCount.textContent = $titleInput.value.length;
   $titleInput.addEventListener('input', (e) => {
     $titleCharsCount.textContent = e.target.value.length;
   });
   $titleInput.addEventListener('change', async (e) => {
+    e.target.value = e.target.value.trim();
     const isValid = e.target.checkValidity();
 
     if (isValid) {
@@ -226,6 +230,28 @@ function createBookmarkElement(bookmark, defaultTitle) {
 
       if (valueMissing || tooShort) $titleInput.value = bookmark.title;
     }
+
+    $titleCharsCount.textContent = e.target.value.length;
+  });
+
+  const $noteInput = $clone.querySelector(
+    '[data-component="bookmark-note-input"]'
+  );
+  const $noteCharsCount = $clone.querySelector(
+    '[data-component="bookmark-note-chars-count"]'
+  );
+  $noteInput.value = bookmark.note || '';
+  $noteCharsCount.textContent = bookmark.note.length || 0;
+  $noteInput.addEventListener('input', (e) => {
+    $noteCharsCount.textContent = e.target.value.length;
+  });
+  $noteInput.addEventListener('change', async (e) => {
+    const result = await chrome.runtime.sendMessage({
+      action: 'UPDATE_BOOKMARK',
+      bookmark: { ...bookmark, note: e.target.value },
+    });
+
+    if (result.success) bookmark.note = e.target.value;
   });
 
   return $clone;
