@@ -43,6 +43,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ success: true, count });
         break;
       }
+      case 'GET_BOOKMARKS_COUNT_BY_VIDEO_ID': {
+        const db = await openDatabase();
+        const count = await getBookmarksPerVideoTotalCount(db, message.videoId);
+        sendResponse({ success: true, count });
+        break;
+      }
       case 'UPDATE_BOOKMARK': {
         const db = await openDatabase();
         await updateBookmark(db, message.bookmark);
@@ -240,6 +246,18 @@ function getVideosTotalCount(db) {
     const t = db.transaction(['videos'], 'readonly');
     const videoStore = t.objectStore('videos');
     const req = videoStore.count();
+
+    req.onsuccess = (event) => {
+      resolve(event.target.result);
+    };
+  });
+}
+
+function getBookmarksPerVideoTotalCount(db, videoId) {
+  return new Promise((resolve) => {
+    const t = db.transaction(['bookmarks'], 'readonly');
+    const bmStore = t.objectStore('bookmarks');
+    const req = bmStore.index(BOOKMARKS_INDEX).count(IDBKeyRange.only(videoId));
 
     req.onsuccess = (event) => {
       resolve(event.target.result);

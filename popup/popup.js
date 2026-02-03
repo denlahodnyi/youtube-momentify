@@ -24,7 +24,7 @@ let currentVideoId;
     if (!resp.list || resp.list.length === 0) {
       showEmptyVideosMessage();
     } else {
-      const videoElements = createVideoElements(resp.list);
+      const videoElements = await createVideoElements(resp.list);
       $videosContainer.append(...videoElements);
     }
   } catch (error) {
@@ -103,12 +103,17 @@ $searchForm.addEventListener('submit', (e) => {
   });
 });
 
-function createVideoElements(list) {
+async function createVideoElements(list) {
   const videoElements = new Set();
   const template = document.getElementById('video-template');
 
   for (const video of list) {
     const $clone = template.content.firstElementChild.cloneNode(true);
+
+    // TODO: think how to make this async
+    const bookmarksCount = await getVideoBookmarksCount(video.videoId);
+    $clone.querySelector('[data-component="bookmarks-count"]').textContent =
+      bookmarksCount;
 
     if (currentVideoId && video.videoId === currentVideoId) {
       $clone.querySelector('[data-component="video"]').open = true;
@@ -224,6 +229,7 @@ function createBookmarkElement(bookmark, defaultTitle) {
         bookmarkId: bookmark.id,
       });
       if (result.success) {
+        const $parentVideo = $clone.closest('[data-component="video"]');
         $clone.parentElement.remove();
         const tabs = await tabsMatchesVideo(bookmark.videoId);
 
@@ -235,6 +241,11 @@ function createBookmarkElement(bookmark, defaultTitle) {
             });
           }
         }
+
+        const bookmarksCount = await getVideoBookmarksCount(bookmark.videoId);
+        $parentVideo.querySelector(
+          '[data-component="bookmarks-count"]'
+        ).textContent = bookmarksCount;
       }
     });
   $clone
@@ -323,6 +334,15 @@ function createBookmarkElement(bookmark, defaultTitle) {
 async function getVideosTotalCount() {
   const resp = await chrome.runtime.sendMessage({
     action: 'GET_VIDEOS_TOTAL_COUNT',
+  });
+
+  return resp.count;
+}
+
+async function getVideoBookmarksCount(videoId) {
+  const resp = await chrome.runtime.sendMessage({
+    action: 'GET_BOOKMARKS_COUNT_BY_VIDEO_ID',
+    videoId,
   });
 
   return resp.count;
