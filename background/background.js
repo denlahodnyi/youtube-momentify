@@ -18,7 +18,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
       case 'GET_VIDEOS_WITH_BOOKMARKS': {
         const db = await openDatabase();
-        const videosWithBookmarks = await getBookmarks(db);
+        const videosWithBookmarks = await getBookmarks(
+          db,
+          message.topmostVideoId
+        );
         sendResponse({ success: true, list: videosWithBookmarks });
         break;
       }
@@ -163,16 +166,24 @@ function createBookmark(db, payload) {
   });
 }
 
-function getBookmarks(db) {
+function getBookmarks(db, topVideoId) {
   return new Promise((resolve) => {
     const t = db.transaction(['videos', 'bookmarks'], 'readonly');
     const videoStore = t.objectStore('videos');
     const bmStore = t.objectStore('bookmarks');
     const cursorReq = videoStore.openCursor();
-    const videosWithBookmarks = [];
+    const videosWithBookmarks = new Map();
 
     t.oncomplete = () => {
-      resolve(videosWithBookmarks);
+      let result = [];
+      if (topVideoId && videosWithBookmarks.has(topVideoId)) {
+        result.push(videosWithBookmarks.get(topVideoId));
+        videosWithBookmarks.delete(topVideoId);
+        result.push(...videosWithBookmarks.values());
+      } else {
+        result = Array.from(videosWithBookmarks.values());
+      }
+      resolve(result);
     };
 
     cursorReq.onsuccess = (e) => {
@@ -183,7 +194,7 @@ function getBookmarks(db) {
           .index(BOOKMARKS_INDEX)
           .getAll(IDBKeyRange.only(video.videoId)).onsuccess = (event) => {
           const bookmarks = event.target.result;
-          videosWithBookmarks.push({
+          videosWithBookmarks.set(video.videoId, {
             ...video,
             bookmarks,
           });

@@ -1,9 +1,18 @@
 const MARK_DEFAULT_COLOR = '#FF7F50';
 
+let currentVideoId;
+
 (async () => {
   try {
+    const [activeTab] = await chrome.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
+    const checkResult = checkVideoPageByUrl(activeTab.url);
+    currentVideoId = checkResult?.videoId;
     const resp = await chrome.runtime.sendMessage({
       action: 'GET_VIDEOS_WITH_BOOKMARKS',
+      topmostVideoId: currentVideoId,
     });
     console.log('bookmarks resp', resp);
 
@@ -97,6 +106,10 @@ function createVideoElements(list) {
 
   for (const video of list) {
     const $clone = template.content.firstElementChild.cloneNode(true);
+
+    if (currentVideoId && video.videoId === currentVideoId) {
+      $clone.querySelector('[data-component="video"]').open = true;
+    }
 
     $clone.querySelector('[data-component="thumbnail"]').src =
       getVideoThumbnailUrl(video.videoId);
