@@ -1,6 +1,7 @@
 console.log('SCRIPT RUNNING');
 const BOOKMARK_BTN_ID = 'yt-momentify-bookmark-btn';
-const TIMESTAMPS_CONTAINER_ID = 'momentify-bookmarks-container';
+const TIMESTAMPS_OUTER_CONTAINER_ID = 'momentify-bar';
+const TIMESTAMPS_INNER_CONTAINER_ID = 'momentify-bookmarks-container';
 const MARK_DEFAULT_COLOR = '#FF7F50';
 let lastUrl = location.href;
 let videoId = getVideoIdFromUrl(lastUrl);
@@ -47,7 +48,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       break;
     }
     case 'CONTENT/DELETE_ALL_BOOKMARKS': {
-      const container = document.getElementById(TIMESTAMPS_CONTAINER_ID);
+      const container = document.getElementById(TIMESTAMPS_INNER_CONTAINER_ID);
       if (container) {
         container.innerHTML = '';
       }
@@ -117,7 +118,7 @@ function createBookmarkButton() {
       if (result.success) {
         const { id, time, color } = result.item.bookmark;
         document
-          .getElementById(TIMESTAMPS_CONTAINER_ID)
+          .getElementById(TIMESTAMPS_INNER_CONTAINER_ID)
           ?.appendChild(createTimestampMark({ id, time, color }, duration));
       }
     } else {
@@ -138,42 +139,66 @@ async function addTimestamps() {
     if (resp.list && resp.list.length > 0) {
       // TODO: sort by time?
       const $video = document.body.querySelector('video');
-      let duration = 0;
+      console.log(`🚀 -> addTimestamps -> $video:`, $video, $video.duration);
+      let duration = $video.duration;
 
       if ($video) {
-        duration = $video.duration;
+        let $bookmarksInnerContainer = document.getElementById(
+          TIMESTAMPS_INNER_CONTAINER_ID
+        );
+
+        if ($bookmarksInnerContainer) {
+          $bookmarksInnerContainer.innerHTML = '';
+        }
+
+        if (Number.isNaN(duration)) {
+          duration = await new Promise((resolve) => {
+            $video.addEventListener('loadedmetadata', () => {
+              resolve($video.duration);
+            });
+          });
+        }
+
+        const $youTubeProgressBar =
+          document.body.querySelector('.ytp-progress-bar');
+
+        if ($youTubeProgressBar) {
+          // let $bookmarksInnerContainer = document.getElementById(
+          //   TIMESTAMPS_INNER_CONTAINER_ID
+          // );
+
+          if (!$bookmarksInnerContainer) {
+            // $bookmarksInnerContainer.innerHTML = '';
+            const $bookmarksOuterContainer = document.createElement('div');
+            $bookmarksOuterContainer.id = TIMESTAMPS_OUTER_CONTAINER_ID;
+            $bookmarksOuterContainer.style.cssText = `
+            position:absolute;
+            top:0;
+            left:0;
+            width:100%;
+            height:100%;
+            `;
+            $bookmarksInnerContainer = document.createElement('div');
+            $bookmarksInnerContainer.id = TIMESTAMPS_INNER_CONTAINER_ID;
+            $bookmarksInnerContainer.style.cssText = `
+              position:relative;
+              width:100%;
+              height:100%;
+            `;
+            $bookmarksOuterContainer.appendChild($bookmarksInnerContainer);
+            $youTubeProgressBar.appendChild($bookmarksOuterContainer);
+          }
+
+          resp.list.forEach((bm) => {
+            $bookmarksInnerContainer.appendChild(
+              createTimestampMark(bm, duration)
+            );
+          });
+        } else {
+          console.error('Cannot find progress bar element');
+        }
       } else {
-        return;
-      }
-
-      const $progressBar = document.body.querySelector('.ytp-progress-bar');
-
-      if ($progressBar) {
-        const $bookmarksOuterContainer = document.createElement('div');
-        $bookmarksOuterContainer.style.cssText = `
-        position:absolute;
-        top:0;
-        left:0;
-        width:100%;
-        height:100%;
-        `;
-        const $bookmarksInnerContainer = document.createElement('div');
-        $bookmarksInnerContainer.id = TIMESTAMPS_CONTAINER_ID;
-        $bookmarksInnerContainer.style.cssText = `
-          position:relative;
-          width:100%;
-          height:100%;
-        `;
-        $bookmarksOuterContainer.appendChild($bookmarksInnerContainer);
-        $progressBar.appendChild($bookmarksOuterContainer);
-
-        resp.list.forEach((bm) => {
-          $bookmarksInnerContainer.appendChild(
-            createTimestampMark(bm, duration)
-          );
-        });
-      } else {
-        console.error('Cannot find progress bar element');
+        console.error('Cannot find video element');
       }
     }
   }

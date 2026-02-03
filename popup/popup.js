@@ -7,13 +7,13 @@ const MARK_DEFAULT_COLOR = '#FF7F50';
     });
     console.log('bookmarks resp', resp);
 
-    const homeTab = document.getElementById('home');
+    const $videosContainer = document.getElementById('videos-list');
 
     if (!resp.list || resp.list.length === 0) {
       showEmptyVideosMessage();
     } else {
       const videoElements = createVideoElements(resp.list);
-      homeTab.append(...videoElements);
+      $videosContainer.append(...videoElements);
     }
   } catch (error) {
     console.error(error?.message);
@@ -67,6 +67,28 @@ $colorPickerPopover.firstElementChild.addEventListener('change', async (e) => {
       }
     }
   }
+});
+
+const $searchForm = document.getElementById('search');
+$searchForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const value = e.target.elements[0].value.trim().toLowerCase();
+  const $videoItems = document.querySelectorAll(
+    '[data-component="video-container"]'
+  );
+
+  $videoItems.forEach(($item) => {
+    // TODO: show something if no results found?
+    const title = $item
+      .querySelector('[data-component="video-title"]')
+      .textContent.toLowerCase();
+
+    if (title.includes(value)) {
+      $item.style.removeProperty('display');
+    } else {
+      $item.style.display = 'none';
+    }
+  });
 });
 
 function createVideoElements(list) {
@@ -349,8 +371,8 @@ async function tabsMatchesVideo(videoId) {
 }
 
 function showEmptyVideosMessage() {
-  const homeTab = document.getElementById('home');
-  homeTab?.insertAdjacentHTML(
+  const $videosContainer = document.getElementById('videos-list');
+  $videosContainer?.insertAdjacentHTML(
     'beforeend',
     '<p class="empty-bookmarks-msg">No bookmarks yet</p>'
   );
