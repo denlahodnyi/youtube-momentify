@@ -15,6 +15,9 @@ let currentVideoId;
       topmostVideoId: currentVideoId,
     });
     console.log('bookmarks resp', resp);
+    const videosCount = await getVideosTotalCount();
+
+    document.getElementById('videos-count').textContent = videosCount;
 
     const $videosContainer = document.getElementById('videos-list');
 
@@ -146,7 +149,10 @@ function createVideoElements(list) {
         if (result.success) {
           $clone.remove();
 
-          if ((await getVideosTotalCount()) === 0) {
+          const videosCount = await getVideosTotalCount();
+          document.getElementById('videos-count').textContent = videosCount;
+
+          if (videosCount === 0) {
             showEmptyVideosMessage();
           }
 
