@@ -44,15 +44,33 @@ body {
   border: 0;
 }
 
+.video {
+  &[open] {
+    & .video-header__marker {
+      rotate: 90deg;
+    }
+  }
+}
+.video-header__marker {
+  inline-size: 18px;
+  aspect-ratio: 1;
+  flex-shrink: 0;
+  transition: rotate 0.2s ease-in-out;
+}
 .video-container {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
 }
 .video__header {
-  /* &::marker {
-    display: block;
-  } */
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.video__thumbnail {
+  inline-size: 100px;
+  aspect-ratio: 2 / 1;
+  object-fit: cover;
 }
 .video__title {
   display: inline;

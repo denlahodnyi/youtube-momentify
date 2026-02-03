@@ -75,6 +75,10 @@ function createVideoElements(list) {
 
   for (const video of list) {
     const $clone = template.content.firstElementChild.cloneNode(true);
+
+    $clone.querySelector('[data-component="thumbnail"]').src =
+      getVideoThumbnailUrl(video.videoId);
+
     $clone.querySelector('[data-component="video-title"]').textContent =
       video.title;
 
@@ -295,6 +299,10 @@ function formatTime(timeInSec) {
   }
 
   return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function getVideoThumbnailUrl(videoId) {
+  return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
 }
 
 function getVideoUrlWithTime(videoId, timeInSec) {
