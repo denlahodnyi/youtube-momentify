@@ -202,9 +202,10 @@ function getBookmarks(db, topVideoId) {
       const cursor = e.target.result;
       if (cursor) {
         const video = cursor.value;
-        bmStore
-          .index(BOOKMARKS_INDEX)
-          .getAll(IDBKeyRange.only(video.videoId)).onsuccess = (event) => {
+        bmStore.index(BOOKMARKS_INDEX).getAll({
+          query: IDBKeyRange.only(video.videoId),
+          direction: 'prev', // show newest first
+        }).onsuccess = (event) => {
           const bookmarks = event.target.result;
           videosWithBookmarks.set(video.videoId, {
             ...video,
