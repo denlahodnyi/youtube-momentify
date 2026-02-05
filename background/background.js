@@ -1,5 +1,6 @@
 const MARK_COLOR = '#FF7F50';
-const BOOKMARKS_INDEX = 'bm_videoId';
+const BOOKMARKS_INDEX = 'bookmarks_idx/by_videoId';
+const VIDEOS_CREATED_AT_INDEX = 'videos_idx/by_createdAt';
 const BOOKMARK_TITLE_CONSTRAINS = { min: 1, max: 80 };
 const BOOKMARK_NOTE_CONSTRAINS = { min: 0, max: 200 };
 
@@ -95,6 +96,9 @@ function openDatabase() {
           keyPath: 'videoId',
         });
         videoObjectStore.createIndex('videoId', 'videoId', { unique: true });
+        videoObjectStore.createIndex(VIDEOS_CREATED_AT_INDEX, 'createdAt', {
+          unique: false,
+        });
       }
       if (!db.objectStoreNames.contains('bookmarks')) {
         const bmObjectStore = db.createObjectStore('bookmarks', {
@@ -183,7 +187,9 @@ function getBookmarks(db, topVideoId) {
     const t = db.transaction(['videos', 'bookmarks'], 'readonly');
     const videoStore = t.objectStore('videos');
     const bmStore = t.objectStore('bookmarks');
-    const cursorReq = videoStore.openCursor();
+    const cursorReq = videoStore
+      .index(VIDEOS_CREATED_AT_INDEX)
+      .openCursor(null, 'prev'); // newest videos first
     const videosWithBookmarks = new Map();
 
     t.oncomplete = () => {
