@@ -1,3 +1,4 @@
+// TODO: fix context loose error (https://stackoverflow.com/questions/53939205/how-to-avoid-extension-context-invalidated-errors-when-messaging-after-an-exte)
 console.log('SCRIPT RUNNING');
 const BOOKMARK_BTN_ID = 'yt-momentify-bookmark-btn';
 const TIMESTAMPS_OUTER_CONTAINER_ID = 'momentify-bar';
@@ -12,7 +13,7 @@ const observer = new MutationObserver(() => {
   if (location.href !== lastUrl) {
     lastUrl = location.href;
     videoId = getVideoIdFromUrl(lastUrl);
-    console.log('lastUrl', lastUrl);
+    console.log('Observer: urls dont match', lastUrl, location.href);
     initUI();
   }
 });
@@ -147,21 +148,35 @@ async function addTimestamps() {
           TIMESTAMPS_INNER_CONTAINER_ID
         );
 
+        console.log(
+          `🚀 -> addTimestamps -> $bookmarksInnerContainer:`,
+          $bookmarksInnerContainer
+        );
         if ($bookmarksInnerContainer) {
           $bookmarksInnerContainer.innerHTML = '';
         }
 
+        console.log(`🚀 -> addTimestamps -> duration:`, duration);
         if (Number.isNaN(duration)) {
           duration = await new Promise((resolve) => {
             $video.addEventListener('loadedmetadata', () => {
+              console.log(
+                `🚀 -> addTimestamps -> loadedmetadata -> $video.duration:`,
+                $video.duration
+              );
               resolve($video.duration);
             });
           });
+          console.log(`🚀 -> addTimestamps -> duration:`, duration);
         }
 
         const $youTubeProgressBar =
           document.body.querySelector('.ytp-progress-bar');
 
+        console.log(
+          `🚀 -> addTimestamps -> $youTubeProgressBar:`,
+          $youTubeProgressBar
+        );
         if ($youTubeProgressBar) {
           // let $bookmarksInnerContainer = document.getElementById(
           //   TIMESTAMPS_INNER_CONTAINER_ID
@@ -199,6 +214,18 @@ async function addTimestamps() {
         }
       } else {
         console.error('Cannot find video element');
+      }
+    } else {
+      const $bookmarksInnerContainer = document.getElementById(
+        TIMESTAMPS_INNER_CONTAINER_ID
+      );
+
+      console.log(
+        `🚀 -> addTimestamps -> $bookmarksInnerContainer:`,
+        $bookmarksInnerContainer
+      );
+      if ($bookmarksInnerContainer) {
+        $bookmarksInnerContainer.innerHTML = '';
       }
     }
   }
