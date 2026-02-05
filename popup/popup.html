@@ -112,6 +112,44 @@
             <p>Count: <span data-component="bookmarks-count">0</span></p>
             <button data-component="clear-bookmarks-btn">Clear all</button>
           </div>
+          <form
+            data-component="bookmarks-sorter"
+            class="video__bookmarks-sorter"
+          >
+            Sort by:
+            <label class="video__bookmarks-sort-btn">
+              Oldest
+              <input
+                type="radio"
+                name="sortBy"
+                value="old"
+                class="scr-only"
+                checked
+              />
+            </label>
+            <label class="video__bookmarks-sort-btn">
+              Newest
+              <input type="radio" name="sortBy" value="new" class="scr-only" />
+            </label>
+            <label class="video__bookmarks-sort-btn">
+              Timestamp (asc)
+              <input
+                type="radio"
+                name="sortBy"
+                value="time_asc"
+                class="scr-only"
+              />
+            </label>
+            <label class="video__bookmarks-sort-btn">
+              Timestamp (desc)
+              <input
+                type="radio"
+                name="sortBy"
+                value="time_desc"
+                class="scr-only"
+              />
+            </label>
+          </form>
           <ul
             data-component="bookmarks-list"
             class="video__list"

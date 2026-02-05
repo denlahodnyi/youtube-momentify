@@ -86,6 +86,11 @@ body {
     } */
   }
 }
+.video__bookmarks-sort-btn {
+  &:has(:checked) {
+    border: 1px solid #000;
+  }
+}
 
 .bm {
   inline-size: 100%;

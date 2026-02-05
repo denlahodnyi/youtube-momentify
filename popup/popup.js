@@ -136,6 +136,8 @@ async function createVideoElements(list) {
       video.bookmarks.forEach((bm, i) => {
         const $bmElement = createBookmarkElement(bm);
         const $li = document.createElement('li');
+        $li.dataset.createdAt = bm.createdAt;
+        $li.dataset.time = bm.time;
         $li.appendChild($bmElement);
         bms.add($li);
       });
@@ -204,6 +206,37 @@ async function createVideoElements(list) {
           }
         }
       });
+
+    $clone
+      .querySelector('[data-component="bookmarks-sorter"]')
+      .addEventListener('change', (e) => {
+        e.preventDefault();
+        console.log('sort by', e.target.value);
+        const $bmList = $clone.querySelector(
+          '[data-component="bookmarks-list"]'
+        );
+        const sortedItems = Array.from($bmList.children).sort((a, b) => {
+          switch (e.target.value) {
+            case 'new': {
+              return b.dataset.createdAt - a.dataset.createdAt;
+            }
+            case 'old': {
+              return a.dataset.createdAt - b.dataset.createdAt;
+            }
+            case 'time_asc': {
+              return a.dataset.time - b.dataset.time;
+            }
+            case 'time_desc': {
+              return b.dataset.time - a.dataset.time;
+            }
+            default:
+              return a.dataset.createdAt - b.dataset.createdAt;
+          }
+        });
+
+        $bmList.innerHTML = '';
+        $bmList.append(...sortedItems);
+      });
   }
 
   return videoElements;
@@ -212,6 +245,9 @@ async function createVideoElements(list) {
 function createBookmarkElement(bookmark) {
   const template = document.getElementById('bookmark-template');
   const $clone = template.content.firstElementChild.cloneNode(true);
+
+  // $clone.dataset.createdAt = bookmark.createdAt;
+  // $clone.dataset.time = bookmark.time;
 
   $clone.querySelector('[data-component="bookmark-timestamp"]').textContent =
     formatTime(bookmark.time);
