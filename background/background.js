@@ -61,6 +61,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ success: true });
         break;
       }
+      case 'DELETE_BOOKMARKS_BY_VIDEO_ID': {
+        const db = await openDatabase();
+        await deleteBookmarksByVideoId(db, message.videoId);
+        sendResponse({ success: true });
+        break;
+      }
       case 'DELETE_VIDEO': {
         const db = await openDatabase();
         await deleteVideo(db, message.videoId);
@@ -313,6 +319,30 @@ function deleteBookmark(db, bookmarkId) {
 
     req.onerror = () => {
       reject(new Error('Failed to delete bookmark'));
+    };
+  });
+}
+
+function deleteBookmarksByVideoId(db, videoId) {
+  return new Promise((resolve, reject) => {
+    const t = db.transaction(['bookmarks'], 'readwrite');
+    const bmStore = t.objectStore('bookmarks');
+    const cursorReq = bmStore
+      .index(BOOKMARKS_INDEX)
+      .openCursor(IDBKeyRange.only(videoId));
+
+    cursorReq.onsuccess = (e) => {
+      const cursor = e.target.result;
+      if (cursor) {
+        cursor.delete();
+        cursor.continue();
+      } else {
+        resolve();
+      }
+    };
+
+    cursorReq.onerror = () => {
+      reject(new Error('Failed to delete bookmarks'));
     };
   });
 }

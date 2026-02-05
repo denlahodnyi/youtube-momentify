@@ -126,6 +126,7 @@ async function createVideoElements(list) {
       video.title;
 
     if (video.bookmarks.length === 0) {
+      // TODO: manage empty message using CSS only?
       $clone.querySelector('[data-component="empty-video-msg"]').style.display =
         'block';
     } else {
@@ -160,6 +161,37 @@ async function createVideoElements(list) {
           if (videosCount === 0) {
             showEmptyVideosMessage();
           }
+
+          const tabs = await tabsMatchesVideo(video.videoId);
+
+          if (tabs) {
+            for (const tab of tabs) {
+              chrome.tabs.sendMessage(tab.id, {
+                action: 'CONTENT/DELETE_ALL_BOOKMARKS',
+              });
+            }
+          }
+        }
+      });
+
+    // TODO: hide clear button if there are no bookmarks
+    $clone
+      .querySelector('[data-component="clear-bookmarks-btn"]')
+      .addEventListener('click', async () => {
+        const result = await chrome.runtime.sendMessage({
+          action: 'DELETE_BOOKMARKS_BY_VIDEO_ID',
+          videoId: video.videoId,
+        });
+
+        if (result.success) {
+          $clone.querySelector('[data-component="bookmarks-list"]').innerHTML =
+            '';
+          $clone.querySelector(
+            '[data-component="bookmarks-count"]'
+          ).textContent = 0;
+          $clone.querySelector(
+            '[data-component="empty-video-msg"]'
+          ).style.display = 'block';
 
           const tabs = await tabsMatchesVideo(video.videoId);
 
