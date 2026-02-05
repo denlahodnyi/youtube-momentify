@@ -155,7 +155,7 @@ function createBookmark(db, payload) {
     const req = t.objectStore('bookmarks').add({
       videoId: payload.videoId,
       time: payload.time,
-      title: '', // TODO: default title?
+      title: new Date().toLocaleString(),
       note: '',
       color: MARK_COLOR,
       createdAt: new Date().getTime(),

@@ -133,7 +133,7 @@ async function createVideoElements(list) {
       $bmList.style.display = 'block';
       const bms = new Set();
       video.bookmarks.forEach((bm, i) => {
-        const $bmElement = createBookmarkElement(bm, `#${i + 1}`);
+        const $bmElement = createBookmarkElement(bm);
         const $li = document.createElement('li');
         $li.appendChild($bmElement);
         bms.add($li);
@@ -177,7 +177,7 @@ async function createVideoElements(list) {
   return videoElements;
 }
 
-function createBookmarkElement(bookmark, defaultTitle) {
+function createBookmarkElement(bookmark) {
   const template = document.getElementById('bookmark-template');
   const $clone = template.content.firstElementChild.cloneNode(true);
 
@@ -282,7 +282,7 @@ function createBookmarkElement(bookmark, defaultTitle) {
   const $titleCharsCount = $title.querySelector(
     '[data-component="bookmark-title-chars-count"]'
   );
-  $titleInput.value = bookmark.title || defaultTitle;
+  $titleInput.value = bookmark.title;
   $titleCharsCount.textContent = $titleInput.value.length;
   $titleInput.addEventListener('input', (e) => {
     $titleCharsCount.textContent = e.target.value.length;
