@@ -135,6 +135,7 @@ async function addTimestamps() {
       action: 'GET_BOOKMARKS_BY_VIDEO_ID',
       videoId,
     });
+    // TODO: sort
     console.log(`🚀 -> addTimestamps -> resp:`, resp);
 
     if (resp.list && resp.list.length > 0) {
@@ -243,18 +244,96 @@ function createTimestampMark(
             top: 50%;
             translate: 0 -50%;
             z-index: 1000;
-            width: 4px;
+            width: 1px;
             height: 8px;
             border-radius: 4px;
             background-color: ${color};
           `;
   const percent = Math.floor((time / duration) * 100);
-  // const percent =
-  //   (bm.time / $bookmarksInnerContainer.clientWidth) * 100;
-  // const percent =
-  //   ($bookmarksInnerContainer.clientWidth * 100) / bm.time;
+
   $mark.style.left = `${percent}%`;
-  return $mark;
+  $mark.style.setProperty('anchor-name', `--mark-${id}`);
+
+  const $popup = createDomElement(`
+    <div id="popup-${id}" data-component="mark-popup">
+      <button data-action="close">x</button>
+      <button data-action="delete">del</button>
+    </div>
+  `);
+  $popup.style.display = 'none';
+  $popup.style.padding = '10px';
+  $popup.style.backgroundColor = '#fff';
+  $popup.style.setProperty('position-anchor', `--mark-${id}`);
+  $popup.style.position = 'fixed';
+  $popup.style.positionArea = 'block-start';
+  $popup.style.zIndex = 1000;
+
+  $popup
+    .querySelector('[data-action="close"]')
+    .addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      $popup.style.display = 'none';
+    });
+  $popup
+    .querySelector('[data-action="delete"]')
+    .addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const result = await chrome.runtime.sendMessage({
+        action: 'DELETE_BOOKMARK',
+        bookmarkId: id,
+      });
+      if (result.success) {
+        $popup.remove();
+        $mark.remove();
+      }
+    });
+
+  [
+    'mousedown',
+    'mouseenter',
+    'mouseleave',
+    'mousemove',
+    'mouseout',
+    'mouseover',
+    'mouseup',
+    'pointerdown',
+    'pointerenter',
+    'pointerleave',
+    'pointermove',
+    'pointerout',
+    'pointerover',
+  ].forEach((event) => {
+    $popup.addEventListener(
+      event,
+      (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      },
+      { capture: true }
+    );
+  });
+
+  // $mark.insertAdjacentElement('afterbegin', $popup);
+  $mark.addEventListener('mouseenter', () => {
+    // $popup.showPopover({ source: $mark });
+    document
+      .getElementById(TIMESTAMPS_INNER_CONTAINER_ID)
+      .querySelectorAll('[data-component="mark-popup"]')
+      .forEach(($p) => {
+        $p.style.display = 'none';
+      });
+    $popup.style.display = 'block';
+  });
+
+  const fragment = new DocumentFragment();
+  fragment.append($mark);
+  fragment.append($popup);
+
+  return fragment;
+
+  // return $mark;
 }
 
 function checkVideoPageByUrl(url) {
@@ -271,4 +350,9 @@ function checkVideoPageByUrl(url) {
 
     return { videoId, time };
   }
+}
+
+function createDomElement(html) {
+  const dom = new DOMParser().parseFromString(html, 'text/html');
+  return dom.body.firstElementChild;
 }
