@@ -1,3 +1,5 @@
+// TODO: refactor error handling
+// TODO: sw must broadcast changes to all tabs
 const MARK_COLOR = '#FF7F50';
 const BOOKMARKS_INDEX = 'bookmarks_idx/by_videoId';
 const VIDEOS_CREATED_AT_INDEX = 'videos_idx/by_createdAt';
@@ -38,6 +40,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ success: true, bookmark });
         break;
       }
+      case 'GET_VIDEO': {
+        const db = await openDatabase();
+        const video = await getVideo(db, message.videoId);
+        sendResponse({ success: true, video });
+        break;
+      }
       case 'GET_VIDEOS_TOTAL_COUNT': {
         const db = await openDatabase();
         const count = await getVideosTotalCount(db);
@@ -55,6 +63,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         await updateBookmark(db, message.bookmark);
         sendResponse({ success: true });
         break;
+      }
+      case 'SAVE_VIDEO_LOOP': {
+        const db = await openDatabase();
+        await saveVideoLoop(
+          db,
+          message.videoId,
+          message.loopStart,
+          message.loopEnd
+        );
+        sendResponse({ success: true });
+        break;
+      }
+      case 'DELETE_VIDEO_LOOP': {
+        const db = await openDatabase();
+        await deleteVideoLoop(db, message.videoId);
+        sendResponse({ success: true });
+        break;
+      }
+      case 'DELETE_VIDEO_LOOP': {
+        const db = await openDatabase();
       }
       case 'DELETE_BOOKMARK': {
         const db = await openDatabase();
@@ -149,6 +177,8 @@ function createBookmark(db, payload) {
         const req = videoStore.add({
           videoId: payload.videoId,
           title: payload.title,
+          loopStart: null, // TODO: rename to loopStartId
+          loopEnd: null, // TODO: rename to loopEndId
           createdAt: new Date().getTime(),
         });
         req.onsuccess = () => {
@@ -254,6 +284,21 @@ function getBookmarksByVideoId(db, videoId) {
   });
 }
 
+function getVideo(db, videoId) {
+  return new Promise((resolve, reject) => {
+    const t = db.transaction(['videos'], 'readonly');
+    const req = t.objectStore('videos').get(videoId);
+
+    req.onsuccess = (e) => {
+      resolve(e.target.result);
+    };
+
+    req.onerror = () => {
+      reject(new Error(`Cannot get video: ${videoId}`));
+    };
+  });
+}
+
 function getVideosTotalCount(db) {
   return new Promise((resolve) => {
     const t = db.transaction(['videos'], 'readonly');
@@ -313,15 +358,106 @@ function updateBookmark(db, bookmark) {
   });
 }
 
+function saveVideoLoop(db, videoId, loopStartId, loopEndId) {
+  return new Promise((resolve, reject) => {
+    const t = db.transaction(['videos'], 'readwrite');
+    const videosStore = t.objectStore('videos');
+    const req = videosStore.get(videoId);
+
+    req.onsuccess = (e) => {
+      const video = e.target.result;
+      video.loopStart = loopStartId;
+      video.loopEnd = loopEndId;
+
+      const updReq = videosStore.put(video);
+
+      updReq.onsuccess = () => {
+        resolve();
+      };
+      updReq.onerror = () => {
+        reject(new Error('Cannot update video'));
+      };
+    };
+
+    req.onerror = () => {
+      reject(new Error('Cannot get video'));
+    };
+  });
+}
+
+function deleteVideoLoop(db, videoId) {
+  return new Promise((resolve, reject) => {
+    const t = db.transaction(['videos'], 'readwrite');
+    const videosStore = t.objectStore('videos');
+    const req = videosStore.get(videoId);
+
+    req.onsuccess = (e) => {
+      const video = e.target.result;
+      video.loopStart = null;
+      video.loopEnd = null;
+
+      const updReq = videosStore.put(video);
+
+      updReq.onsuccess = () => {
+        resolve();
+      };
+      updReq.onerror = () => {
+        reject(new Error('Cannot update video'));
+      };
+    };
+
+    req.onerror = () => {
+      reject(new Error('Cannot get video'));
+    };
+  });
+}
+
 function deleteBookmark(db, bookmarkId) {
   return new Promise((resolve, reject) => {
-    const t = db.transaction(['bookmarks'], 'readwrite');
+    const t = db.transaction(['bookmarks', 'videos'], 'readwrite');
     const bmStore = t.objectStore('bookmarks');
-    const req = bmStore.delete(bookmarkId);
+    const req = bmStore.get(bookmarkId);
 
-    req.onsuccess = () => {
-      console.log('Bookmark deleted', bookmarkId);
-      resolve();
+    req.onsuccess = (e) => {
+      const bookmark = e.target.result;
+
+      if (bookmark) {
+        const videoGetReq = t.objectStore('videos').get(bookmark.videoId);
+
+        videoGetReq.onsuccess = (e) => {
+          const video = e.target.result;
+
+          if (video.loopStart === bookmarkId || video.loopEnd === bookmarkId) {
+            const videoPutReq = t
+              .objectStore('videos')
+              .put({ ...video, loopStart: null, loopEnd: null });
+            videoPutReq.onsuccess = () => {
+              const bmDelReq = bmStore.delete(bookmarkId);
+              bmDelReq.onsuccess = () => {
+                resolve();
+              };
+              bmDelReq.onerror = () => {
+                reject(new Error('Failed to delete bookmark'));
+              };
+            };
+            videoPutReq.onerror = () => {
+              reject(new Error('Failed to delete bookmark'));
+            };
+          } else {
+            const bmDelReq = bmStore.delete(bookmarkId);
+            bmDelReq.onsuccess = () => {
+              resolve();
+            };
+            bmDelReq.onerror = () => {
+              reject(new Error('Failed to delete bookmark'));
+            };
+          }
+        };
+
+        videoGetReq.onerror = () => {
+          reject(new Error('Failed to delete bookmark'));
+        };
+      }
     };
 
     req.onerror = () => {
@@ -332,24 +468,43 @@ function deleteBookmark(db, bookmarkId) {
 
 function deleteBookmarksByVideoId(db, videoId) {
   return new Promise((resolve, reject) => {
-    const t = db.transaction(['bookmarks'], 'readwrite');
+    const t = db.transaction(['bookmarks', 'videos'], 'readwrite');
     const bmStore = t.objectStore('bookmarks');
     const cursorReq = bmStore
       .index(BOOKMARKS_INDEX)
       .openCursor(IDBKeyRange.only(videoId));
+
+    t.oncomplete = () => {
+      resolve();
+    };
 
     cursorReq.onsuccess = (e) => {
       const cursor = e.target.result;
       if (cursor) {
         cursor.delete();
         cursor.continue();
-      } else {
-        resolve();
       }
     };
 
     cursorReq.onerror = () => {
       reject(new Error('Failed to delete bookmarks'));
+    };
+
+    const videoGetReq = t.objectStore('videos').get(videoId);
+
+    videoGetReq.onsuccess = (e) => {
+      const video = e.target.result;
+      const videoPutReq = t
+        .objectStore('videos')
+        .put({ ...video, loopStart: null, loopEnd: null });
+
+      videoPutReq.onerror = () => {
+        console.error('Cannot update video');
+      };
+    };
+
+    videoGetReq.onerror = (e) => {
+      console.error('Cannot get video');
     };
   });
 }

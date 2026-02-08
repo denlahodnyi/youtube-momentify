@@ -43,15 +43,46 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       break;
     }
     case 'CONTENT/DELETE_BOOKMARK': {
+      // TODO: check if loop should be removed & remove loop
+      const $loopMarks = getCurrentLoopMarks();
+
+      if ($loopMarks[0] && $loopMarks[1]) {
+        const startId = getMarkId($loopMarks[0]);
+        const endId = getMarkId($loopMarks[1]);
+
+        if (startId === message.bookmarkId || endId === message.bookmarkId) {
+          removeLoop();
+          delete $loopMarks[0].dataset.loop;
+          delete $loopMarks[1].dataset.loop;
+          const $loopBtnStart = document
+            .getElementById(`bookmark-popup-${startId}`)
+            .querySelector('[data-component="loop-btn"]');
+          const $loopBtnStartLabel = document
+            .getElementById(`bookmark-popup-${startId}`)
+            .querySelector('[data-component="loop-btn"]');
+          setLoopUI($loopMarks[0], $loopBtnStart, $loopBtnStartLabel);
+          const $loopBtnEnd = document
+            .getElementById(`bookmark-popup-${endId}`)
+            .querySelector('[data-component="loop-btn"]');
+          const $loopBtnEndLabel = document
+            .getElementById(`bookmark-popup-${endId}`)
+            .querySelector('[data-component="loop-btn"]');
+          setLoopUI($loopMarks[0], $loopBtnEnd, $loopBtnEndLabel);
+        }
+      }
+
       document
         .getElementById(`momentify-bookmark-${message.bookmarkId}`)
         ?.remove();
+      document.getElementById(`bookmark-popup-${message.bookmarkId}`)?.remove();
       break;
     }
     case 'CONTENT/DELETE_ALL_BOOKMARKS': {
       const container = document.getElementById(TIMESTAMPS_INNER_CONTAINER_ID);
       if (container) {
         container.innerHTML = '';
+        // TODO: remove loop
+        removeLoop();
       }
       break;
     }
@@ -60,9 +91,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-function initUI() {
+async function initUI() {
   addBookmarkButton();
-  addTimestamps();
+  await addTimestamps();
+  await setLoop();
 }
 
 function getVideoIdFromUrl(url) {
@@ -205,9 +237,15 @@ async function addTimestamps() {
             $youTubeProgressBar.appendChild($bookmarksOuterContainer);
           }
 
+          const videoResp = await chrome.runtime.sendMessage({
+            action: 'GET_VIDEO',
+            videoId,
+          });
+          console.log(`🚀 -> addTimestamps -> videoResp:`, videoResp);
+
           resp.list.forEach((bm) => {
             $bookmarksInnerContainer.appendChild(
-              createTimestampMark(bm, duration)
+              createTimestampMark(bm, duration, videoResp.video)
             );
           });
         } else {
@@ -232,13 +270,19 @@ async function addTimestamps() {
   }
 }
 
+// let tempLoopIds = [];
+
 function createTimestampMark(
   { id, time, color = MARK_DEFAULT_COLOR },
-  duration
+  duration,
+  { loopStart, loopEnd } = {}
 ) {
   const $mark = document.createElement('div');
   $mark.id = `momentify-bookmark-${id}`;
   $mark.dataset.time = time;
+  if (loopStart === id) $mark.dataset.loop = 'start';
+  else if (loopEnd === id) $mark.dataset.loop = 'finish';
+  $mark.dataset.component = 'mark';
   $mark.style.cssText = `
             position: absolute;
             top: 50%;
@@ -249,15 +293,28 @@ function createTimestampMark(
             border-radius: 4px;
             background-color: ${color};
           `;
-  const percent = Math.floor((time / duration) * 100);
+  console.log(
+    `🚀 -> createTimestampMark -> (time / duration) * 100:`,
+    { time, duration },
+    (time / duration) * 100
+  );
+  const percent = (time / duration) * 100;
+  console.log(`🚀 -> createTimestampMark -> percent:`, percent);
 
   $mark.style.left = `${percent}%`;
   $mark.style.setProperty('anchor-name', `--mark-${id}`);
 
+  // TODO: use shadow dom to isolate styles
+  // TODO: change id name to momentify-
   const $popup = createDomElement(`
-    <div id="popup-${id}" data-component="mark-popup">
+    <div id="bookmark-popup-${id}" data-component="mark-popup">
       <button data-action="close">x</button>
       <button data-action="delete">del</button>
+      <button data-component="loop-btn" data-action="" hidden></button>
+      <span data-component="loop-label" hidden>
+        <span></span>
+        <button data-component="loop-del-btn" data-action="remove-loop">x</button>
+      </span>
     </div>
   `);
   $popup.style.display = 'none';
@@ -267,6 +324,7 @@ function createTimestampMark(
   $popup.style.position = 'fixed';
   $popup.style.positionArea = 'block-start';
   $popup.style.zIndex = 1000;
+  $popup.style.color = '#000';
 
   $popup
     .querySelector('[data-action="close"]')
@@ -285,10 +343,104 @@ function createTimestampMark(
         bookmarkId: id,
       });
       if (result.success) {
+        // TODO: check and remove loop
+        const $loopMarks = getCurrentLoopMarks();
+
+        if ($loopMarks[0] && $loopMarks[1]) {
+          const startId = getMarkId($loopMarks[0]);
+          const endId = getMarkId($loopMarks[1]);
+
+          if (startId === id || endId === id) {
+            removeLoop();
+            delete $loopMarks[0].dataset.loop;
+            delete $loopMarks[1].dataset.loop;
+            const $loopBtnStart = document
+              .getElementById(`bookmark-popup-${startId}`)
+              .querySelector('[data-component="loop-btn"]');
+            const $loopBtnStartLabel = document
+              .getElementById(`bookmark-popup-${startId}`)
+              .querySelector('[data-component="loop-btn"]');
+            setLoopUI($loopMarks[0], $loopBtnStart, $loopBtnStartLabel);
+            const $loopBtnEnd = document
+              .getElementById(`bookmark-popup-${endId}`)
+              .querySelector('[data-component="loop-btn"]');
+            const $loopBtnEndLabel = document
+              .getElementById(`bookmark-popup-${endId}`)
+              .querySelector('[data-component="loop-btn"]');
+            setLoopUI($loopMarks[0], $loopBtnEnd, $loopBtnEndLabel);
+          }
+        }
+
         $popup.remove();
         $mark.remove();
       }
     });
+  const $loopLabel = $popup.querySelector('[data-component="loop-label"]');
+  const $loopButton = $popup.querySelector('[data-component="loop-btn"]');
+  const $loopDeleteButton = $popup.querySelector(
+    '[data-component="loop-del-btn"]'
+  );
+  $loopButton.addEventListener('click', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const action = e.target.dataset.action;
+    if (action === 'start') {
+      // tempLoopIds = [id];
+      $mark.dataset.loop = 'start';
+      setLoopUI($mark, $loopButton, $loopLabel);
+      return;
+    }
+
+    const loopMarks = getCurrentLoopMarks();
+
+    if (action === 'finish' && loopMarks[0]) {
+      // save loop
+      const result = await chrome.runtime.sendMessage({
+        action: 'SAVE_VIDEO_LOOP',
+        videoId,
+        loopStart: getMarkId(loopMarks[0]),
+        loopEnd: id,
+      });
+      if (result.success) {
+        // set data-loop on mark
+        $mark.dataset.loop = 'finish';
+        // document.getElementById(
+        //   `momentify-bookmark-${tempLoopIds[0]}`
+        // ).dataset.loop = 'start';
+        // loopMarks[0].dataset.loop = 'start';
+        // update popup ui
+        setLoopUI($mark, $loopButton, $loopLabel);
+        setLoop();
+        // tempLoopIds = [];
+      }
+    }
+  });
+  $loopDeleteButton.addEventListener('click', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const loopMarks = getCurrentLoopMarks();
+    console.log(`🚀 -> createTimestampMark -> loopMarks:`, loopMarks);
+
+    if (loopMarks[0] && loopMarks[1]) {
+      // del loop
+      const result = await chrome.runtime.sendMessage({
+        action: 'DELETE_VIDEO_LOOP',
+        videoId,
+      });
+      if (result.success) {
+        removeLoop();
+        // remove data-loop from marks
+        loopMarks.forEach(($m) => {
+          delete $m.dataset.loop;
+        });
+        // update popup ui
+        setLoopUI($mark, $loopButton, $loopLabel);
+      }
+    } else {
+      delete $mark.dataset.loop;
+      setLoopUI($mark, $loopButton, $loopLabel);
+    }
+  });
 
   [
     'mousedown',
@@ -325,6 +477,8 @@ function createTimestampMark(
         $p.style.display = 'none';
       });
     $popup.style.display = 'block';
+
+    setLoopUI($mark, $loopButton, $loopLabel);
   });
 
   const fragment = new DocumentFragment();
@@ -334,6 +488,104 @@ function createTimestampMark(
   return fragment;
 
   // return $mark;
+}
+
+function setLoopUI($mark, $loopButton, $loopLabel) {
+  const loopMarks = getCurrentLoopMarks();
+
+  if ($mark.dataset.loop === 'start' || $mark.dataset.loop === 'finish') {
+    if ($mark.dataset.loop === 'start') {
+      $loopLabel.firstElementChild.textContent = 'Loop starts here';
+    } else {
+      $loopLabel.firstElementChild.textContent = 'Loop ends here';
+    }
+
+    $loopButton.dataset.action = '';
+    $loopButton.hidden = true;
+    $loopLabel.hidden = false;
+  } else if (loopMarks[0]) {
+    $loopButton.textContent = 'End loop here';
+    $loopButton.dataset.action = 'finish';
+    $loopButton.hidden = false;
+    $loopLabel.hidden = true;
+  } else {
+    $loopButton.textContent = 'Start loop here';
+    $loopButton.dataset.action = 'start';
+    $loopButton.hidden = false;
+    $loopLabel.hidden = true;
+  }
+}
+
+let loopStart = 0;
+let loopEnd = 0;
+
+async function setLoop() {
+  console.log(`🚀 -> setLoop`, videoId);
+  if (videoId) {
+    const result = await chrome.runtime.sendMessage({
+      action: 'GET_VIDEO',
+      videoId,
+    });
+    console.log(`🚀 -> setLoop -> result:`, result);
+    const video = document.querySelector('video');
+
+    if (result.video && result.video.loopStart && result.video.loopEnd) {
+      const $startMark = document.getElementById(
+        `momentify-bookmark-${result.video.loopStart}`
+      );
+      const $endMark = document.getElementById(
+        `momentify-bookmark-${result.video.loopEnd}`
+      );
+      console.log(`🚀 -> setLoop -> $startMark:`, $startMark);
+      console.log(`🚀 -> setLoop -> $endMark:`, $endMark);
+      if ($startMark && $endMark) {
+        const startTime = Number($startMark.dataset.time);
+        const endTime = Number($endMark.dataset.time);
+        loopStart = Math.min(startTime, endTime);
+        loopEnd = Math.max(startTime, endTime);
+        console.log(`🚀 -> setLoop -> loopStart:`, loopStart);
+        console.log(`🚀 -> setLoop -> loopEnd:`, loopEnd);
+        video.addEventListener('timeupdate', loopHandler);
+        video.addEventListener('seeked', (e) => {
+          console.log('seeked', e.target.currentTime);
+        });
+        video.addEventListener('seeking', (e) => {
+          console.log('seeking', e.target.currentTime);
+        });
+      }
+    } else {
+      video.removeEventListener('timeupdate', loopHandler);
+    }
+  }
+}
+
+function removeLoop() {
+  const video = document.querySelector('video');
+  video.removeEventListener('timeupdate', loopHandler);
+}
+
+function loopHandler(e) {
+  if (e.target.currentTime >= loopEnd) {
+    e.target.currentTime = loopStart;
+  } else if (e.target.currentTime < loopStart) {
+    e.target.currentTime = loopStart;
+  }
+}
+
+// function seekHandler() {
+
+// }
+
+function getMarkId($mark) {
+  return Number($mark.id.split('momentify-bookmark-')[1]);
+}
+
+function getCurrentLoopMarks() {
+  const $container = document.getElementById(TIMESTAMPS_INNER_CONTAINER_ID);
+  const $start = $container.querySelector('[data-loop="start"]');
+  const $end = $container.querySelector('[data-loop="finish"]');
+
+  return [$start, $end];
 }
 
 function checkVideoPageByUrl(url) {
