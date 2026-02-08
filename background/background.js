@@ -113,7 +113,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 function openDatabase() {
   return new Promise((resolve, reject) => {
     if (!indexedDB) reject(new Error('IndexedDB not supported'));
-    const dbOpenRequest = indexedDB.open('momentify-db', 1);
+    const dbOpenRequest = indexedDB.open('momentify-db', 1); // TODO: rest db version
 
     dbOpenRequest.onupgradeneeded = (e) => {
       const db = e.target.result;
@@ -123,7 +123,13 @@ function openDatabase() {
         const videoObjectStore = db.createObjectStore('videos', {
           keyPath: 'videoId',
         });
-        videoObjectStore.createIndex('videoId', 'videoId', { unique: true });
+        videoObjectStore.createIndex(
+          'videos_idx/by_unique_videoId',
+          'videoId',
+          {
+            unique: true,
+          }
+        );
         videoObjectStore.createIndex(VIDEOS_CREATED_AT_INDEX, 'createdAt', {
           unique: false,
         });
@@ -136,6 +142,13 @@ function openDatabase() {
         bmObjectStore.createIndex(BOOKMARKS_INDEX, 'videoId', {
           unique: false,
         });
+        bmObjectStore.createIndex(
+          'bookmarks_idx/by_unique_videoId_time',
+          ['videoId', 'time'],
+          {
+            unique: true,
+          }
+        );
       }
     };
 
