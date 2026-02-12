@@ -9,7 +9,8 @@
   "content_scripts": [
     {
       "matches": ["https://*.youtube.com/*"],
-      "js": ["content/content.js"]
+      "js": ["content/content.js"],
+      "css": ["content/content.css"]
     }
   ],
   "background": {

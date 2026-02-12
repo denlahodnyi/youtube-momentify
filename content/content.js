@@ -79,6 +79,18 @@ class ContentRenderer {
         });
 
         if (result.success) {
+          Array.from(
+            this.Mark.findAllLoopMarks(this.ProgressBar.findMarksContainer()),
+          )
+            .filter(
+              ($m) =>
+                this.Mark.getBookmarkIdFromDom($m) !== loopStartId &&
+                this.Mark.getBookmarkIdFromDom($m) !== loopEndId,
+            )
+            .forEach(($m) => {
+              delete $m.dataset.loop;
+              this.Mark.syncMarkLoopUI($m);
+            });
           sender.mark.dataset.loop = 'finish';
           this.Mark.syncMarkLoopUI(sender.mark);
           this.setupDomLoop(loopStartId, loopEndId);
@@ -359,32 +371,30 @@ class Mark {
         anchor-name: --mark-${id}
       "></div>
     `);
-    if (loopStartId === id) this.mark.dataset.loop = 'start';
-    else if (loopEndId === id) this.mark.dataset.loop = 'finish';
 
     this.mark.addEventListener('mouseenter', this.handleMarkHover.bind(this));
 
-    // TODO: use shadow dom to isolate styles
-    // TODO: change id name to momentify-
     this.popup = createDomElement(`
-      <div id="${Mark.createPopupDomId(id)}" data-component="mark-popup" data-open="false" style="
-        all: initial;
-        display: none;
-        padding: 10px;
-        background-color: #FFF;
-        position-anchor: --mark-${id};
-        position: fixed;
-        position-area: block-start;
-        z-index: 1000;
-        color: #000;
-      ">
-        <button data-action="close">x</button>
-        <button data-action="delete">del</button>
-        <button data-component="loop-btn" data-action="" hidden></button>
-        <span data-component="loop-label" hidden>
-          <span></span>
-          <button data-component="loop-del-btn" data-action="remove-loop">x</button>
-        </span>
+      <div id="${Mark.createPopupDomId(id)}" data-component="mark-popup" data-open="false" style="all: initial; display: none;">
+        <div class="momentify-mark-popup" style="position-anchor: --mark-${id};">
+          <button aria-label="Close popup" data-action="close" class="momentify-default-btn momentify-mark-popup__close-btn">
+            <svg aria-hidden xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x-icon lucide-x"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          </button>
+          <button data-component="loop-btn" data-action="" class="momentify-default-btn momentify-mark-popup__loop-btn" hidden>
+            <svg aria-hidden xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-repeat2-icon lucide-repeat-2"><path d="m2 9 3-3 3 3"/><path d="M13 18H7a2 2 0 0 1-2-2V6"/><path d="m22 15-3 3-3-3"/><path d="M11 6h6a2 2 0 0 1 2 2v10"/></svg>
+            <span></span>
+          </button>
+          <span data-component="loop-label" class="momentify-mark-popup__loop-label" hidden>
+            <span></span>
+            <button aria-label="Remove loop" data-component="loop-del-btn" data-action="remove-loop" class="momentify-default-btn momentify-mark-popup__del-loop-btn">
+              <svg aria-hidden xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-delete-icon lucide-delete"><path d="M10 5a2 2 0 0 0-1.344.519l-6.328 5.74a1 1 0 0 0 0 1.481l6.328 5.741A2 2 0 0 0 10 19h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2z"/><path d="m12 9 6 6"/><path d="m18 9-6 6"/></svg>
+            </button>
+          </span>
+          <button data-action="delete" class="momentify-default-btn momentify-mark-popup__del-btn">
+            <svg aria-hidden xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trash2-icon lucide-trash-2"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            Delete
+          </button>
+        </div>
       </div>
     `);
 
@@ -406,8 +416,8 @@ class Mark {
     this.loopSign = createDomElement(`
       <div data-component="loop-sign" style="
         display: none;
-        width: 4px;
-        height: 4px;
+        width: 5px;
+        height: 5px;
         border-radius: 50%;
         border: 1px solid lch(100 0 0 / 0.6);
         background-color: lime;
@@ -418,6 +428,14 @@ class Mark {
         z-index: 1000;
       "></div>
     `);
+
+    if (loopStartId === id) {
+      this.mark.dataset.loop = 'start';
+      this.loopSign.style.display = 'block';
+    } else if (loopEndId === id) {
+      this.mark.dataset.loop = 'finish';
+      this.loopSign.style.display = 'block';
+    }
 
     this.dom.append(this.mark);
     this.dom.append(this.popup);
@@ -445,12 +463,16 @@ class Mark {
     return [$start, $end];
   }
 
+  static findAllLoopMarks($container = document) {
+    return $container.querySelectorAll('[data-loop]');
+  }
+
   static createMarkDomId(bookmarkId) {
     return `momentify-bookmark-${bookmarkId}`;
   }
 
   static createPopupDomId(bookmarkId) {
-    return `bookmark-popup-${bookmarkId}`;
+    return `momentify-bookmark-popup-${bookmarkId}`;
   }
 
   static createMarkWrapperDomId(bookmarkId) {
@@ -506,13 +528,13 @@ class Mark {
       $loopLabel.hidden = false;
       $loopSign.style.display = 'block';
     } else if ($loopMarks[0]) {
-      $loopButton.textContent = 'End loop here';
+      $loopButton.querySelector('span').textContent = 'Set loop end';
       $loopButton.dataset.action = 'finish';
       $loopButton.hidden = false;
       $loopLabel.hidden = true;
       $loopSign.style.display = 'none';
     } else {
-      $loopButton.textContent = 'Start loop here';
+      $loopButton.querySelector('span').textContent = 'Set loop start';
       $loopButton.dataset.action = 'start';
       $loopButton.hidden = false;
       $loopLabel.hidden = true;
@@ -561,7 +583,7 @@ class Mark {
   }
 
   handleLoopSet(e) {
-    const action = e.target.dataset.action;
+    const action = e.currentTarget.dataset.action;
 
     if (action === 'start') {
       this.mark.dataset.loop = 'start';

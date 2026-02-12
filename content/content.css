@@ -1,0 +1,119 @@
+:root {
+  --momentify-prime: hsl(207, 80%, 52%);
+  --momentify-shadow: 0px 2px 10px -1px #cecece;
+}
+
+.momentify-default-btn {
+  padding: 0;
+  background-color: transparent;
+  border: none;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.momentify-mark-popup {
+  padding: 10px;
+  position: fixed;
+  inset-block-end: 4px;
+  position-area: block-start;
+  z-index: 1000;
+  border-radius: 8px;
+  color: #000;
+  background-color: #fff;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.momentify-mark-popup__close-btn {
+  position: absolute;
+  inset-block-start: -8px;
+  inset-inline-end: -8px;
+  z-index: 1;
+  inline-size: 20px;
+  block-size: 20px;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background-color: #fff;
+  box-shadow: var(--momentify-shadow);
+
+  &:where(:hover, :focus) {
+    background-color: hsl(from var(--momentify-prime) h s calc(l + 38));
+  }
+}
+
+.momentify-mark-popup__del-btn {
+  --color: hsl(0, 93%, 37%);
+  inline-size: 100%;
+  padding: 2px 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border-radius: 4px;
+  border: 1px solid var(--color);
+  color: var(--color);
+  font-size: 14px;
+
+  &:where(:hover, :focus) {
+    background-color: color-mix(in hsl, var(--color), transparent 95%);
+  }
+
+  & svg {
+    inline-size: 16px;
+    block-size: 16px;
+  }
+}
+
+.momentify-mark-popup__loop-btn {
+  inline-size: 100%;
+  margin-block-end: 8px;
+  padding: 2px 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid #cecece;
+  border-radius: 4px;
+  font-size: 14px;
+  background-color: #fff;
+  box-shadow: var(--momentify-shadow);
+
+  &:where(:hover, :focus) {
+    background-color: color-mix(
+      in hsl,
+      var(--momentify-prime),
+      transparent 95%
+    );
+  }
+
+  & svg {
+    inline-size: 16px;
+    block-size: 16px;
+  }
+}
+
+.momentify-mark-popup__loop-label {
+  display: block;
+  margin-block-end: 8px;
+  padding: 0;
+  font-size: 16px;
+}
+
+.momentify-mark-popup__del-loop-btn {
+  inline-size: 20px;
+  block-size: 20px;
+  margin-inline-start: 2px;
+  padding: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #cecece;
+  border-radius: 50%;
+
+  & svg {
+    inline-size: 12px;
+    block-size: 12px;
+  }
+}
