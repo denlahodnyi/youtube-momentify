@@ -66,8 +66,7 @@ class ContentRenderer {
             payload: { bookmarkId },
           });
 
-          sender.mark.remove();
-          sender.popup.remove();
+          Mark.removeMark(bookmarkId);
         }
         break;
       }
@@ -88,7 +87,7 @@ class ContentRenderer {
       }
       case 'renderer/delete_loop': {
         const $loopMarks = this.Mark.findLoopMarks(
-          this.ProgressBar.findMarksContainer()
+          this.ProgressBar.findMarksContainer(),
         );
 
         if ($loopMarks[0] && $loopMarks[1]) {
@@ -108,7 +107,7 @@ class ContentRenderer {
       case 'renderer/clear_loop_ui': {
         this.removeDomLoop();
         const $loopMarks = this.Mark.findLoopMarks(
-          this.ProgressBar.findMarksContainer()
+          this.ProgressBar.findMarksContainer(),
         );
         if ($loopMarks[0]) {
           delete $loopMarks[0].dataset.loop;
@@ -123,7 +122,7 @@ class ContentRenderer {
       case 'renderer/clear_loop_ui_by_bookmarkId': {
         const { bookmarkId } = event.payload;
         const $loopMarks = this.Mark.findLoopMarks(
-          this.ProgressBar.findMarksContainer()
+          this.ProgressBar.findMarksContainer(),
         );
 
         if ($loopMarks[0] && $loopMarks[1]) {
@@ -155,7 +154,7 @@ class ContentRenderer {
       const button = new this.BookmarkButton();
       button.setMediator(this);
       const $controlsContainer = document.body.querySelector(
-        '#movie_player .ytp-right-controls'
+        '#movie_player .ytp-right-controls',
       );
 
       if ($controlsContainer) {
@@ -339,9 +338,14 @@ class ProgressBar {
 class Mark {
   constructor({ id, time, color, duration, loopStartId, loopEndId }) {
     this.id = id;
+
+    this.dom = createDomElement(`
+      <div id="${Mark.createMarkWrapperDomId(id)}" data-component="mark-wrapper"></div>
+    `);
+
     this.mark = createDomElement(`
       <div id="${Mark.createMarkDomId(
-        id
+        id,
       )}" data-time="${time}" data-component="mark" style="
         position: absolute;
         top: 50%;
@@ -363,7 +367,8 @@ class Mark {
     // TODO: use shadow dom to isolate styles
     // TODO: change id name to momentify-
     this.popup = createDomElement(`
-      <div id="${Mark.createPopupDomId(id)}" data-component="mark-popup" style="
+      <div id="${Mark.createPopupDomId(id)}" data-component="mark-popup" data-open="false" style="
+        all: initial;
         display: none;
         padding: 10px;
         background-color: #FFF;
@@ -398,10 +403,10 @@ class Mark {
       .querySelector('[data-component="loop-btn"]')
       .addEventListener('click', this.handleLoopSet.bind(this));
 
-    const fragment = new DocumentFragment();
-    fragment.append(this.mark);
-    fragment.append(this.popup);
-    this.dom = fragment;
+    this.dom.append(this.mark);
+    this.dom.append(this.popup);
+
+    this.boundedHandlePopupClickAway = this.handlePopupClickAway.bind(this);
   }
 
   setMediator(mediator) {
@@ -431,8 +436,32 @@ class Mark {
     return `bookmark-popup-${bookmarkId}`;
   }
 
+  static createMarkWrapperDomId(bookmarkId) {
+    return `momentify-wrapper-bookmark-${bookmarkId}`;
+  }
+
   static getBookmarkIdFromDom($mark) {
     return Number($mark.id.split('momentify-bookmark-')[1]);
+  }
+
+  static removeMark(bookmarkId) {
+    document.getElementById(this.createMarkWrapperDomId(bookmarkId))?.remove();
+  }
+
+  static isInPopup($el) {
+    const $openedPopup = document.querySelector(
+      '[data-component="mark-popup"][data-open="true"]',
+    );
+    return Boolean(
+      $openedPopup && ($el === $openedPopup || $openedPopup.contains($el)),
+    );
+  }
+
+  static closeAllPopups() {
+    document.querySelectorAll('[data-component="mark-popup"]').forEach(($p) => {
+      $p.style.display = 'none';
+      $p.dataset.open = 'false';
+    });
   }
 
   static syncPopupUI($mark) {
@@ -467,8 +496,15 @@ class Mark {
   handleMarkHover() {
     document.querySelectorAll('[data-component="mark-popup"]').forEach(($p) => {
       $p.style.display = 'none';
+      $p.dataset.open = 'false';
     });
     this.popup.style.display = 'block';
+    this.popup.dataset.open = 'true';
+    document
+      .querySelector('video')
+      ?.addEventListener('click', this.boundedHandlePopupClickAway, {
+        capture: true,
+      });
     Mark.syncPopupUI(this.mark);
   }
 
@@ -476,6 +512,18 @@ class Mark {
     e.preventDefault();
     e.stopPropagation();
     this.popup.style.display = 'none';
+    this.popup.dataset.open = 'false';
+  }
+
+  handlePopupClickAway(e) {
+    if (!Mark.isInPopup(e.target)) {
+      Mark.closeAllPopups();
+      document
+        .querySelector('video')
+        ?.removeEventListener('click', this.boundedHandlePopupClickAway, {
+          capture: true,
+        });
+    }
   }
 
   handleDeleteBookmark(e) {
@@ -517,17 +565,17 @@ class Mark {
     [
       'mousedown',
       'mouseenter',
-      'mouseleave',
+      // 'mouseleave',
       'mousemove',
-      'mouseout',
       'mouseover',
+      // 'mouseout',
       'mouseup',
       'pointerdown',
       'pointerenter',
-      'pointerleave',
+      // 'pointerleave',
       'pointermove',
-      'pointerout',
       'pointerover',
+      // 'pointerout',
     ].forEach((event) => {
       this.popup.addEventListener(
         event,
@@ -535,7 +583,7 @@ class Mark {
           e.preventDefault();
           e.stopPropagation();
         },
-        { capture: true }
+        { capture: true },
       );
     });
   }
@@ -593,7 +641,7 @@ const contentRenderer = new ContentRenderer(
   BookmarkButton,
   ProgressBar,
   Mark,
-  Services
+  Services,
 );
 contentRenderer.render();
 
@@ -622,8 +670,7 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
         type: 'renderer/clear_loop_ui_by_bookmarkId',
         payload: { bookmarkId: message.bookmarkId },
       });
-      Mark.findMark(message.bookmarkId).remove();
-      Mark.findPopup(message.bookmarkId).remove();
+      Mark.removeMark(message.bookmarkId);
       break;
     }
     case 'CONTENT/DELETE_ALL_BOOKMARKS': {
