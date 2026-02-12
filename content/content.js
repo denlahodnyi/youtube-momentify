@@ -80,7 +80,7 @@ class ContentRenderer {
 
         if (result.success) {
           sender.mark.dataset.loop = 'finish';
-          this.Mark.syncPopupUI(sender.mark);
+          this.Mark.syncMarkLoopUI(sender.mark);
           this.setupDomLoop(loopStartId, loopEndId);
         }
         break;
@@ -100,7 +100,7 @@ class ContentRenderer {
           }
         } else {
           delete sender.mark.dataset.loop;
-          this.Mark.syncPopupUI(sender.mark);
+          this.Mark.syncMarkLoopUI(sender.mark);
         }
         break;
       }
@@ -111,11 +111,11 @@ class ContentRenderer {
         );
         if ($loopMarks[0]) {
           delete $loopMarks[0].dataset.loop;
-          this.Mark.syncPopupUI($loopMarks[0]);
+          this.Mark.syncMarkLoopUI($loopMarks[0]);
         }
         if ($loopMarks[1]) {
           delete $loopMarks[1].dataset.loop;
-          this.Mark.syncPopupUI($loopMarks[1]);
+          this.Mark.syncMarkLoopUI($loopMarks[1]);
         }
         break;
       }
@@ -133,8 +133,8 @@ class ContentRenderer {
             this.removeDomLoop();
             delete $loopMarks[0].dataset.loop;
             delete $loopMarks[1].dataset.loop;
-            this.Mark.syncPopupUI($loopMarks[0]);
-            this.Mark.syncPopupUI($loopMarks[1]);
+            this.Mark.syncMarkLoopUI($loopMarks[0]);
+            this.Mark.syncMarkLoopUI($loopMarks[1]);
           }
         }
         break;
@@ -403,8 +403,25 @@ class Mark {
       .querySelector('[data-component="loop-btn"]')
       .addEventListener('click', this.handleLoopSet.bind(this));
 
+    this.loopSign = createDomElement(`
+      <div data-component="loop-sign" style="
+        display: none;
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        border: 1px solid lch(100 0 0 / 0.6);
+        background-color: lime;
+        position-anchor: --mark-${id};
+        position: fixed;
+        position-area: block-end;
+        inset-block-start: 1px;
+        z-index: 1000;
+      "></div>
+    `);
+
     this.dom.append(this.mark);
     this.dom.append(this.popup);
+    this.dom.append(this.loopSign);
 
     this.boundedHandlePopupClickAway = this.handlePopupClickAway.bind(this);
   }
@@ -464,11 +481,18 @@ class Mark {
     });
   }
 
-  static syncPopupUI($mark) {
+  static syncMarkLoopUI($mark) {
+    const id = this.getBookmarkIdFromDom($mark);
     const $loopMarks = this.findLoopMarks();
-    const $popup = this.findPopup(this.getBookmarkIdFromDom($mark));
+    const $markContainer = document.getElementById(
+      this.createMarkWrapperDomId(id),
+    );
+    const $popup = this.findPopup(id);
     const $loopButton = $popup.querySelector('[data-component="loop-btn"]');
     const $loopLabel = $popup.querySelector('[data-component="loop-label"]');
+    const $loopSign = $markContainer.querySelector(
+      '[data-component="loop-sign"]',
+    );
 
     if ($mark.dataset.loop === 'start' || $mark.dataset.loop === 'finish') {
       if ($mark.dataset.loop === 'start') {
@@ -480,16 +504,19 @@ class Mark {
       $loopButton.dataset.action = '';
       $loopButton.hidden = true;
       $loopLabel.hidden = false;
+      $loopSign.style.display = 'block';
     } else if ($loopMarks[0]) {
       $loopButton.textContent = 'End loop here';
       $loopButton.dataset.action = 'finish';
       $loopButton.hidden = false;
       $loopLabel.hidden = true;
+      $loopSign.style.display = 'none';
     } else {
       $loopButton.textContent = 'Start loop here';
       $loopButton.dataset.action = 'start';
       $loopButton.hidden = false;
       $loopLabel.hidden = true;
+      $loopSign.style.display = 'none';
     }
   }
 
@@ -505,7 +532,7 @@ class Mark {
       ?.addEventListener('click', this.boundedHandlePopupClickAway, {
         capture: true,
       });
-    Mark.syncPopupUI(this.mark);
+    Mark.syncMarkLoopUI(this.mark);
   }
 
   handleClosePopup(e) {
@@ -538,7 +565,7 @@ class Mark {
 
     if (action === 'start') {
       this.mark.dataset.loop = 'start';
-      Mark.syncPopupUI(this.mark);
+      Mark.syncMarkLoopUI(this.mark);
       return;
     }
 
