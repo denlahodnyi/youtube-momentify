@@ -11,6 +11,7 @@ class ContentRenderer {
     loopStart: 0,
     loopEnd: 0,
   };
+  popupsContainerId = 'momentify-bookmark-popups-container';
 
   BookmarkButton;
   ProgressBar;
@@ -47,12 +48,15 @@ class ContentRenderer {
 
           if (result.success) {
             const { id, time, color } = result.item.bookmark;
-            const mark = new Mark({ id, time, color, duration });
+            const mark = new Mark(
+              { id, time, color, duration },
+              { popupsContainerId: this.popupsContainerId },
+            );
             mark.setMediator(this);
             ProgressBar.findMarksContainer()?.append(mark.dom);
           }
         } else {
-          console.error('No video element found');
+          console.error('[momentify] No video element found');
         }
         break;
       }
@@ -157,8 +161,25 @@ class ContentRenderer {
   }
 
   render() {
+    this.renderPopupsContainer();
     this.renderBookmarkButton();
     this.renderProgressBar();
+  }
+
+  renderPopupsContainer() {
+    // Render out of .ytp-progress-bar to prevent issue with containing block
+    const $YTprogressBarContainer = document.querySelector(
+      '.ytp-progress-bar-container',
+    );
+    if ($YTprogressBarContainer) {
+      $YTprogressBarContainer.append(
+        createDomElement(`
+        <div id="${this.popupsContainerId}"></div>
+      `),
+      );
+    } else {
+      console.error('[momentify] Cannot find YouTube progress bar container');
+    }
   }
 
   renderBookmarkButton() {
@@ -189,7 +210,7 @@ class ContentRenderer {
           const progressBar = new this.ProgressBar();
           $youTubeProgressBar.append(progressBar.dom);
         } else {
-          console.error('Cannot find YT progress bar element');
+          console.error('[momentify] Cannot find YT progress bar element');
         }
       }
 
@@ -218,14 +239,17 @@ class ContentRenderer {
             const { loopStart, loopEnd } = videoRes.video;
 
             bookmarksRes.list.forEach((bm) => {
-              const mark = new this.Mark({
-                id: bm.id,
-                time: bm.time,
-                color: bm.color,
-                duration,
-                loopStartId: loopStart,
-                loopEndId: loopEnd,
-              });
+              const mark = new this.Mark(
+                {
+                  id: bm.id,
+                  time: bm.time,
+                  color: bm.color,
+                  duration,
+                  loopStartId: loopStart,
+                  loopEndId: loopEnd,
+                },
+                { popupsContainerId: this.popupsContainerId },
+              );
               mark.setMediator(this);
               $marksContainer.append(mark.dom);
             });
@@ -237,7 +261,7 @@ class ContentRenderer {
             }
           }
         } else {
-          console.error('Cannot find video element');
+          console.error('[momentify] Cannot find video element');
         }
       }
     }
@@ -348,8 +372,12 @@ class ProgressBar {
 }
 
 class Mark {
-  constructor({ id, time, color, duration, loopStartId, loopEndId }) {
+  constructor(
+    { id, time, color, duration, loopStartId, loopEndId },
+    { popupsContainerId },
+  ) {
     this.id = id;
+    this.popupsContainerId = popupsContainerId;
 
     this.dom = createDomElement(`
       <div id="${Mark.createMarkWrapperDomId(id)}" data-component="mark-wrapper"></div>
@@ -375,7 +403,18 @@ class Mark {
     this.mark.addEventListener('mouseenter', this.handleMarkHover.bind(this));
 
     this.popup = createDomElement(`
-      <div id="${Mark.createPopupDomId(id)}" data-component="mark-popup" data-open="false" style="all: initial; display: none;">
+      <div id="${Mark.createPopupDomId(id)}" data-component="mark-popup" data-open="false" style="
+        font: initial;
+        shadow: initial;
+        position: initial;
+        text-shadow: initial;
+        text-decoration: initial;
+        cursor: initial;
+        margin: initial;
+        padding: initial;
+        background: initial;
+        display: none;"
+      >
         <div class="momentify-mark-popup" style="position-anchor: --mark-${id};">
           <button aria-label="Close popup" data-action="close" class="momentify-default-btn momentify-mark-popup__close-btn">
             <svg aria-hidden xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x-icon lucide-x"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
@@ -392,7 +431,7 @@ class Mark {
           </span>
           <button data-action="delete" class="momentify-default-btn momentify-mark-popup__del-btn">
             <svg aria-hidden xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trash2-icon lucide-trash-2"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-            Delete
+            Remove bookmark
           </button>
         </div>
       </div>
@@ -438,8 +477,8 @@ class Mark {
     }
 
     this.dom.append(this.mark);
-    this.dom.append(this.popup);
     this.dom.append(this.loopSign);
+    document.getElementById(this.popupsContainerId)?.append(this.popup);
 
     this.boundedHandlePopupClickAway = this.handlePopupClickAway.bind(this);
   }
