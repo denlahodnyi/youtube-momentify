@@ -12,6 +12,13 @@
   cursor: pointer;
 }
 
+.momentify-mark {
+  transition: transform 0.2s linear;
+  &:where(:hover) {
+    transform: scale(6, 2);
+  }
+}
+
 .momentify-mark-popup {
   --d: 0.625rem; /* distance between tooltip and anchor */
   --s: 0.5625rem; /* tail size */
@@ -22,6 +29,7 @@
   z-index: 1000;
   margin-top: var(--d);
   padding: 10px;
+  border: none;
   border-radius: 8px;
   color: #000;
   background-color: #fff;
@@ -33,8 +41,10 @@
     width: var(--s);
     margin: inherit;
     background: inherit;
-    inset: calc(-1 * var(--d)) 0;
-    left: calc(50% - var(--s) / 2);
+    inset-block-start: calc(-1 * var(--d));
+    inset-block-end: calc(-1 * var(--d));
+    inset-inline-start: 50%;
+    transform: translateX(-50%);
     clip-path: polygon(
       50% 0.2em,
       100% var(--d),
@@ -62,7 +72,7 @@
   box-shadow: var(--momentify-btn-shadow);
   transition: box-shadow 0.2s ease;
 
-  &:where(:hover, :focus) {
+  &:where(:hover, :focus-visible) {
     box-shadow: var(--momentify-btn-shadow), var(--momentify-hover-shadow);
   }
 }
@@ -81,7 +91,7 @@
   font-size: 12px;
   transition: all 0.2s ease;
 
-  &:where(:hover, :focus) {
+  &:where(:hover, :focus-visible) {
     background-color: color-mix(in hsl, var(--color), transparent 95%);
   }
 
@@ -106,7 +116,7 @@
   box-shadow: var(--momentify-shadow);
   transition: all 0.2s ease;
 
-  &:where(:hover, :focus) {
+  &:where(:hover, :focus-visible) {
     background-color: color-mix(
       in hsl,
       var(--momentify-prime),
@@ -139,7 +149,7 @@
   border-radius: 50%;
   transition: box-shadow 0.2s ease;
 
-  &:where(:hover, :focus) {
+  &:where(:hover, :focus-visible) {
     box-shadow: var(--momentify-btn-shadow), var(--momentify-hover-shadow);
   }
 

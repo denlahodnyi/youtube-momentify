@@ -372,6 +372,8 @@ class ProgressBar {
 }
 
 class Mark {
+  youtubeVideContainerClassname = '.html5-video-player';
+
   constructor(
     { id, time, color, duration, loopStartId, loopEndId },
     { popupsContainerId },
@@ -384,9 +386,7 @@ class Mark {
     `);
 
     this.mark = createDomElement(`
-      <div id="${Mark.createMarkDomId(
-        id,
-      )}" data-time="${time}" data-component="mark" style="
+      <button id="${Mark.createMarkDomId(id)}" tabindex="0" aria-haspopup="dialog" aria-label="Bookmark" data-time="${time}" data-component="mark" class="momentify-mark" style="
         position: absolute;
         top: 50%;
         left: ${(time / duration) * 100}%;
@@ -394,28 +394,28 @@ class Mark {
         z-index: 1000;
         width: 1px;
         height: 8px;
+        padding: 0;
+        border: none;
         border-radius: 4px;
         background-color: ${color};
         anchor-name: --mark-${id}
-      "></div>
+      "></button>
     `);
 
-    this.mark.addEventListener('mouseenter', this.handleMarkHover.bind(this));
+    this.mark.addEventListener(
+      'mouseenter',
+      this.handleMarkHoverOrClick.bind(this),
+    );
+    this.mark.addEventListener('click', this.handleMarkHoverOrClick.bind(this));
 
     this.popup = createDomElement(`
-      <div id="${Mark.createPopupDomId(id)}" data-component="mark-popup" data-open="false" style="
-        font: initial;
-        shadow: initial;
-        position: initial;
-        text-shadow: initial;
-        text-decoration: initial;
-        cursor: initial;
-        margin: initial;
-        padding: initial;
-        background: initial;
-        display: none;"
+      <dialog id="${Mark.createPopupDomId(id)}"
+        data-component="mark-popup"
+        aria-label="Bookmark settings"
+        class="momentify-mark-popup"
+        style="position-anchor: --mark-${id};"
       >
-        <div class="momentify-mark-popup" style="position-anchor: --mark-${id};">
+        <div>
           <button aria-label="Close popup" data-action="close" class="momentify-default-btn momentify-mark-popup__close-btn">
             <svg aria-hidden xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x-icon lucide-x"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
           </button>
@@ -434,7 +434,7 @@ class Mark {
             Remove bookmark
           </button>
         </div>
-      </div>
+      </dialog>
     `);
 
     this.disablePopupTouchEventsLeak();
@@ -478,7 +478,22 @@ class Mark {
 
     this.dom.append(this.mark);
     this.dom.append(this.loopSign);
-    document.getElementById(this.popupsContainerId)?.append(this.popup);
+
+    // This wrapper is just to reset some inherited styles
+    const $popupWrapper = createDomElement(`
+      <div style="
+          font: initial;
+          shadow: initial;
+          position: initial;
+          text-shadow: initial;
+          text-decoration: initial;
+          cursor: initial;
+          margin: initial;
+          padding: initial;
+          background: initial;"></div>
+    `);
+    $popupWrapper.append(this.popup);
+    document.getElementById(this.popupsContainerId)?.append($popupWrapper);
 
     this.boundedHandlePopupClickAway = this.handlePopupClickAway.bind(this);
   }
@@ -528,7 +543,7 @@ class Mark {
 
   static isInPopup($el) {
     const $openedPopup = document.querySelector(
-      '[data-component="mark-popup"][data-open="true"]',
+      '[data-component="mark-popup"][open]',
     );
     return Boolean(
       $openedPopup && ($el === $openedPopup || $openedPopup.contains($el)),
@@ -537,8 +552,7 @@ class Mark {
 
   static closeAllPopups() {
     document.querySelectorAll('[data-component="mark-popup"]').forEach(($p) => {
-      $p.style.display = 'none';
-      $p.dataset.open = 'false';
+      $p.close();
     });
   }
 
@@ -581,15 +595,13 @@ class Mark {
     }
   }
 
-  handleMarkHover() {
+  handleMarkHoverOrClick(e) {
     document.querySelectorAll('[data-component="mark-popup"]').forEach(($p) => {
-      $p.style.display = 'none';
-      $p.dataset.open = 'false';
+      $p.close();
     });
-    this.popup.style.display = 'block';
-    this.popup.dataset.open = 'true';
+    this.popup.show();
     document
-      .querySelector('video')
+      .querySelector(this.youtubeVideContainerClassname)
       ?.addEventListener('click', this.boundedHandlePopupClickAway, {
         capture: true,
       });
@@ -599,15 +611,14 @@ class Mark {
   handleClosePopup(e) {
     e.preventDefault();
     e.stopPropagation();
-    this.popup.style.display = 'none';
-    this.popup.dataset.open = 'false';
+    this.popup.close();
   }
 
   handlePopupClickAway(e) {
     if (!Mark.isInPopup(e.target)) {
       Mark.closeAllPopups();
       document
-        .querySelector('video')
+        .querySelector(this.youtubeVideContainerClassname)
         ?.removeEventListener('click', this.boundedHandlePopupClickAway, {
           capture: true,
         });
