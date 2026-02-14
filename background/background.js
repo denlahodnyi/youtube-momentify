@@ -23,7 +23,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const db = await openDatabase();
         const videosWithBookmarks = await getBookmarks(
           db,
-          message.topmostVideoId
+          message.topmostVideoId,
         );
         sendResponse({ success: true, list: videosWithBookmarks });
         break;
@@ -70,7 +70,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           db,
           message.videoId,
           message.loopStart,
-          message.loopEnd
+          message.loopEnd,
         );
         sendResponse({ success: true });
         break;
@@ -128,7 +128,7 @@ function openDatabase() {
           'videoId',
           {
             unique: true,
-          }
+          },
         );
         videoObjectStore.createIndex(VIDEOS_CREATED_AT_INDEX, 'createdAt', {
           unique: false,
@@ -147,7 +147,7 @@ function openDatabase() {
           ['videoId', 'time'],
           {
             unique: true,
-          }
+          },
         );
       }
     };
@@ -292,7 +292,10 @@ function getBookmarksByVideoId(db, videoId) {
       .getAll(IDBKeyRange.only(videoId));
 
     req.onsuccess = (event) => {
-      resolve(event.target.result);
+      const sortedByAscTime = event.target.result.toSorted(
+        (a, b) => a.time - b.time,
+      );
+      resolve(sortedByAscTime);
     };
   });
 }
@@ -347,15 +350,15 @@ function updateBookmark(db, bookmark) {
     ) {
       reject(
         new Error(
-          `Bookmark title must be between ${BOOKMARK_TITLE_CONSTRAINS.min} and ${BOOKMARK_TITLE_CONSTRAINS.max} characters`
-        )
+          `Bookmark title must be between ${BOOKMARK_TITLE_CONSTRAINS.min} and ${BOOKMARK_TITLE_CONSTRAINS.max} characters`,
+        ),
       );
     }
     if (bookmark.note.length > BOOKMARK_TITLE_CONSTRAINS.max) {
       reject(
         new Error(
-          `Bookmark note must be less than ${BOOKMARK_NOTE_CONSTRAINS.max} characters`
-        )
+          `Bookmark note must be less than ${BOOKMARK_NOTE_CONSTRAINS.max} characters`,
+        ),
       );
     }
 
