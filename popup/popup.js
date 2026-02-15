@@ -4,6 +4,8 @@ let currentVideoId;
 
 (async () => {
   try {
+    createHomePage();
+
     const [activeTab] = await chrome.tabs.query({
       active: true,
       currentWindow: true,
@@ -91,6 +93,11 @@ $searchForm.addEventListener('submit', (e) => {
     }
   });
 });
+
+function createHomePage() {
+  const $tmpl = document.getElementById('home-template');
+  document.getElementById('root').append($tmpl.content.cloneNode(true));
+}
 
 async function createVideoElements(list) {
   const videoElements = new Set();

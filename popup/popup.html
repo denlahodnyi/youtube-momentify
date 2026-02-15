@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
   <head>
     <meta charset="UTF-8" />
@@ -8,17 +8,7 @@
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
-    <!-- <h1>Hello Extensions</h1> -->
-    <div id="home">
-      <div class="page__header">
-        <form action="" id="search" class="search">
-          <input type="search" aria-label="Search by video title" />
-        </form>
-      </div>
-      <div id="videos-list">
-        <p>Total saved videos: <span id="videos-count">0</span></p>
-      </div>
-    </div>
+    <div id="root"></div>
 
     <div id="bookmark-color-picker" popover="auto" class="bm-color-picker">
       <form class="bm-color-picker__form">
@@ -80,6 +70,17 @@
         </label>
       </form>
     </div>
+
+    <template id="home-template">
+      <div class="page__header">
+        <form action="" id="search" class="search">
+          <input type="search" aria-label="Search by video title" />
+        </form>
+      </div>
+      <div id="videos-list">
+        <p>Total saved videos: <span id="videos-count">0</span></p>
+      </div>
+    </template>
 
     <template id="video-template">
       <div data-component="video-container" class="video-container">
