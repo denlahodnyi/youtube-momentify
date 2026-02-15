@@ -47,7 +47,7 @@ class ContentRenderer {
           });
 
           if (result.success) {
-            const { id, time, color } = result.item.bookmark;
+            const { id, time, color } = result.bookmark;
             const mark = new Mark(
               { id, time, color, duration },
               { popupsContainerId: this.popupsContainerId },
@@ -236,7 +236,7 @@ class ContentRenderer {
           const $marksContainer = ProgressBar.findMarksContainer();
 
           if ($marksContainer) {
-            const { loopStart, loopEnd } = videoRes.video;
+            const { loopStartId, loopEndId } = videoRes.video;
 
             bookmarksRes.list.forEach((bm) => {
               const mark = new this.Mark(
@@ -245,8 +245,8 @@ class ContentRenderer {
                   time: bm.time,
                   color: bm.color,
                   duration,
-                  loopStartId: loopStart,
-                  loopEndId: loopEnd,
+                  loopStartId,
+                  loopEndId,
                 },
                 { popupsContainerId: this.popupsContainerId },
               );
@@ -254,8 +254,8 @@ class ContentRenderer {
               $marksContainer.append(mark.dom);
             });
 
-            if (loopStart && loopEnd) {
-              this.setupDomLoop(loopStart, loopEnd);
+            if (loopStartId && loopEndId) {
+              this.setupDomLoop(loopStartId, loopEndId);
             } else {
               this.removeDomLoop();
             }
@@ -723,8 +723,8 @@ class Services {
     return await chrome.runtime.sendMessage({
       action: 'SAVE_VIDEO_LOOP',
       videoId,
-      loopStart: loopStartId,
-      loopEnd: loopEndId,
+      loopStartId,
+      loopEndId,
     });
   }
 
