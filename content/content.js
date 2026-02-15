@@ -34,30 +34,37 @@ class ContentRenderer {
 
   async notify(sender, event) {
     switch (event.type) {
+      case 'renderer/render_bookmark': {
+        const $video = document.body.querySelector('video');
+
+        if ($video) {
+          const { id, time, color } = event.payload.bookmark;
+          const mark = new Mark(
+            { id, time, color, duration: $video.duration },
+            { popupsContainerId: this.popupsContainerId },
+          );
+          mark.setMediator(this);
+          ProgressBar.findMarksContainer()?.append(mark.dom);
+        } else {
+          console.error('[momentify] No video element found');
+        }
+
+        break;
+      }
       case 'renderer/save_bookmark': {
         const video = document.body.querySelector('video');
         const title = document.title.split(' - YouTube')[0];
 
         if (video) {
-          const { currentTime, duration } = video;
-          const result = await this.services.createBookmark({
-            time: currentTime,
+          await this.services.createBookmark({
+            time: video.currentTime,
             title,
             videoId: this.state.videoId,
           });
-
-          if (result.success) {
-            const { id, time, color } = result.bookmark;
-            const mark = new Mark(
-              { id, time, color, duration },
-              { popupsContainerId: this.popupsContainerId },
-            );
-            mark.setMediator(this);
-            ProgressBar.findMarksContainer()?.append(mark.dom);
-          }
         } else {
           console.error('[momentify] No video element found');
         }
+
         break;
       }
       case 'renderer/delete_bookmark': {
@@ -754,6 +761,13 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
         video.currentTime = message.time;
         video.play();
       }
+      break;
+    }
+    case 'CONTENT/CREATE_BOOKMARK': {
+      await contentRenderer.notify(null, {
+        type: 'renderer/render_bookmark',
+        payload: { bookmark: message.bookmark },
+      });
       break;
     }
     case 'CONTENT/UPDATE_BOOKMARK_COLOR': {

@@ -15,6 +15,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       switch (message.action) {
         case 'CREATE_BOOKMARK': {
           const { video, bookmark } = await createBookmark(db, message);
+          const tabs = await getCurrentVideoTabs(video.videoId);
+
+          if (tabs.length) {
+            for (const tab of tabs) {
+              chrome.tabs.sendMessage(tab.id, {
+                action: 'CONTENT/CREATE_BOOKMARK',
+                bookmark,
+              });
+            }
+          }
+
           sendResponse({ success: true, video, bookmark });
           break;
         }
@@ -55,7 +66,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           break;
         }
         case 'UPDATE_BOOKMARK': {
-          const result = await updateBookmark(db, message.bookmark);
+          const { bookmark } = message;
+          const result = await updateBookmark(db, bookmark);
+
+          if (!result?.error) {
+            const tabs = await getCurrentVideoTabs(bookmark.videoId);
+
+            if (tabs.length) {
+              for (const tab of tabs) {
+                chrome.tabs.sendMessage(tab.id, {
+                  action: 'CONTENT/UPDATE_BOOKMARK_COLOR',
+                  bookmarkId: bookmark.id,
+                  color: bookmark.color,
+                });
+              }
+            }
+          }
+
           sendResponse(
             result?.error
               ? { success: false, error: result.error }
@@ -79,17 +106,49 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           break;
         }
         case 'DELETE_BOOKMARK': {
-          await deleteBookmark(db, message.bookmarkId);
+          const { videoId } = await deleteBookmark(db, message.bookmarkId);
+          const tabs = await getCurrentVideoTabs(videoId);
+
+          if (tabs) {
+            for (const tab of tabs) {
+              chrome.tabs.sendMessage(tab.id, {
+                action: 'CONTENT/DELETE_BOOKMARK',
+                bookmarkId: message.bookmarkId,
+              });
+            }
+          }
+
           sendResponse({ success: true });
           break;
         }
         case 'DELETE_BOOKMARKS_BY_VIDEO_ID': {
           await deleteBookmarksByVideoId(db, message.videoId);
+          const tabs = await getCurrentVideoTabs(message.videoId);
+
+          if (tabs) {
+            for (const tab of tabs) {
+              chrome.tabs.sendMessage(tab.id, {
+                action: 'CONTENT/DELETE_ALL_BOOKMARKS',
+              });
+            }
+          }
+
           sendResponse({ success: true });
           break;
         }
         case 'DELETE_VIDEO': {
-          await deleteVideo(db, message.videoId);
+          const { videoId } = message;
+          await deleteVideo(db, videoId);
+          const tabs = await getCurrentVideoTabs(videoId);
+
+          if (tabs.length) {
+            for (const tab of tabs) {
+              chrome.tabs.sendMessage(tab.id, {
+                action: 'CONTENT/DELETE_ALL_BOOKMARKS',
+              });
+            }
+          }
+
           sendResponse({ success: true });
           break;
         }
@@ -432,9 +491,10 @@ function deleteBookmark(db, bookmarkId) {
   return new Promise((resolve, reject) => {
     const t = db.transaction(['bookmarks', 'videos'], 'readwrite');
     const bmStore = t.objectStore('bookmarks');
+    const result = { bookmarkId: null, videoId: null };
 
     t.oncomplete = () => {
-      resolve();
+      resolve(result);
     };
 
     t.onabort = () => {
@@ -449,6 +509,8 @@ function deleteBookmark(db, bookmarkId) {
 
         videoGetReq.onsuccess = (e) => {
           const video = e.target.result;
+          result.bookmarkId = bookmarkId;
+          result.videoId = bookmark.videoId;
 
           if (
             video.loopStartId === bookmarkId ||
@@ -530,4 +592,12 @@ function deleteVideo(db, videoId) {
       };
     };
   });
+}
+
+async function getCurrentVideoTabs(videoId) {
+  const tabs = await chrome.tabs.query({
+    url: `https://*.youtube.com/watch?v=${videoId}*`,
+  });
+
+  return tabs;
 }

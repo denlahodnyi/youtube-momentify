@@ -66,17 +66,6 @@ $colorPickerPopover.firstElementChild.addEventListener('change', async (e) => {
 
     if (result.success) {
       currentBookmark.color = e.target.value;
-      const tabs = await tabsMatchesVideo(getRes.bookmark.videoId);
-
-      if (tabs) {
-        for (const tab of tabs) {
-          chrome.tabs.sendMessage(tab.id, {
-            action: 'CONTENT/UPDATE_BOOKMARK_COLOR',
-            bookmarkId: getRes.bookmark.id,
-            color: e.target.value,
-          });
-        }
-      }
     }
   }
 });
@@ -86,7 +75,7 @@ $searchForm.addEventListener('submit', (e) => {
   e.preventDefault();
   const value = e.target.elements[0].value.trim().toLowerCase();
   const $videoItems = document.querySelectorAll(
-    '[data-component="video-container"]'
+    '[data-component="video-container"]',
   );
 
   $videoItems.forEach(($item) => {
@@ -163,16 +152,6 @@ async function createVideoElements(list) {
           if (videosCount === 0) {
             showEmptyVideosMessage();
           }
-
-          const tabs = await tabsMatchesVideo(video.videoId);
-
-          if (tabs) {
-            for (const tab of tabs) {
-              chrome.tabs.sendMessage(tab.id, {
-                action: 'CONTENT/DELETE_ALL_BOOKMARKS',
-              });
-            }
-          }
         }
       });
 
@@ -189,21 +168,11 @@ async function createVideoElements(list) {
           $clone.querySelector('[data-component="bookmarks-list"]').innerHTML =
             '';
           $clone.querySelector(
-            '[data-component="bookmarks-count"]'
+            '[data-component="bookmarks-count"]',
           ).textContent = 0;
           $clone.querySelector(
-            '[data-component="empty-video-msg"]'
+            '[data-component="empty-video-msg"]',
           ).style.display = 'block';
-
-          const tabs = await tabsMatchesVideo(video.videoId);
-
-          if (tabs) {
-            for (const tab of tabs) {
-              chrome.tabs.sendMessage(tab.id, {
-                action: 'CONTENT/DELETE_ALL_BOOKMARKS',
-              });
-            }
-          }
         }
       });
 
@@ -213,7 +182,7 @@ async function createVideoElements(list) {
         e.preventDefault();
         console.log('sort by', e.target.value);
         const $bmList = $clone.querySelector(
-          '[data-component="bookmarks-list"]'
+          '[data-component="bookmarks-list"]',
         );
         const sortedItems = Array.from($bmList.children).sort((a, b) => {
           switch (e.target.value) {
@@ -256,7 +225,7 @@ function createBookmarkElement(bookmark) {
   $clone
     .querySelector('[data-component="play-btn"]')
     .addEventListener('click', async () => {
-      const activeTab = await activeTabMatchesVideo(bookmark.videoId);
+      const activeTab = await getCurrentVideoActiveTab(bookmark.videoId);
       console.log(`🚀 -> createBookmarkElement -> activeTab:`, activeTab);
 
       if (activeTab) {
@@ -267,7 +236,7 @@ function createBookmarkElement(bookmark) {
         return;
       }
 
-      const tabs = await tabsMatchesVideo(bookmark.videoId);
+      const tabs = await getCurrentVideoTabs(bookmark.videoId);
       console.log(`🚀 -> createBookmarkElement -> tabs:`, tabs);
 
       if (tabs) {
@@ -299,20 +268,10 @@ function createBookmarkElement(bookmark) {
       if (result.success) {
         const $parentVideo = $clone.closest('[data-component="video"]');
         $clone.parentElement.remove();
-        const tabs = await tabsMatchesVideo(bookmark.videoId);
-
-        if (tabs) {
-          for (const tab of tabs) {
-            chrome.tabs.sendMessage(tab.id, {
-              action: 'CONTENT/DELETE_BOOKMARK',
-              bookmarkId: bookmark.id,
-            });
-          }
-        }
 
         const bookmarksCount = await getVideoBookmarksCount(bookmark.videoId);
         $parentVideo.querySelector(
-          '[data-component="bookmarks-count"]'
+          '[data-component="bookmarks-count"]',
         ).textContent = bookmarksCount;
       }
     });
@@ -321,7 +280,7 @@ function createBookmarkElement(bookmark) {
     .addEventListener('click', async () => {
       try {
         await navigator.clipboard.writeText(
-          getVideoUrlWithTime(bookmark.videoId, bookmark.time)
+          getVideoUrlWithTime(bookmark.videoId, bookmark.time),
         );
       } catch (error) {
         console.error(error);
@@ -330,12 +289,12 @@ function createBookmarkElement(bookmark) {
 
   // Color picker
   const $colorButton = $clone.querySelector(
-    '[data-component="bookmark-color"]'
+    '[data-component="bookmark-color"]',
   );
   $colorButton.style.backgroundColor = bookmark.color;
   $colorButton.addEventListener('click', () => {
     const $colorPickerPopover = document.getElementById(
-      'bookmark-color-picker'
+      'bookmark-color-picker',
     );
     $colorPopoverInvoker = $colorButton;
     currentBookmark = bookmark;
@@ -345,10 +304,10 @@ function createBookmarkElement(bookmark) {
   // Title
   const $title = $clone.querySelector('[data-component="bookmark-title"]');
   const $titleInput = $clone.querySelector(
-    '[data-component="bookmark-title-input"]'
+    '[data-component="bookmark-title-input"]',
   );
   const $titleCharsCount = $title.querySelector(
-    '[data-component="bookmark-title-chars-count"]'
+    '[data-component="bookmark-title-chars-count"]',
   );
   $titleInput.value = bookmark.title;
   $titleCharsCount.textContent = $titleInput.value.length;
@@ -377,10 +336,10 @@ function createBookmarkElement(bookmark) {
 
   // Note
   const $noteInput = $clone.querySelector(
-    '[data-component="bookmark-note-input"]'
+    '[data-component="bookmark-note-input"]',
   );
   const $noteCharsCount = $clone.querySelector(
-    '[data-component="bookmark-note-chars-count"]'
+    '[data-component="bookmark-note-chars-count"]',
   );
   $noteInput.value = bookmark.note || '';
   $noteCharsCount.textContent = bookmark.note.length || 0;
@@ -454,7 +413,7 @@ function checkVideoPageByUrl(url) {
   }
 }
 
-async function activeTabMatchesVideo(videoId) {
+async function getCurrentVideoActiveTab(videoId) {
   const [activeTab] = await chrome.tabs.query({
     active: true,
     currentWindow: true,
@@ -466,7 +425,7 @@ async function activeTabMatchesVideo(videoId) {
   }
 }
 
-async function tabsMatchesVideo(videoId) {
+async function getCurrentVideoTabs(videoId) {
   const tabs = await chrome.tabs.query({
     url: `https://*.youtube.com/watch?v=${videoId}*`,
   });
@@ -481,6 +440,6 @@ function showEmptyVideosMessage() {
   const $videosContainer = document.getElementById('videos-list');
   $videosContainer?.insertAdjacentHTML(
     'beforeend',
-    '<p class="empty-bookmarks-msg">No bookmarks yet</p>'
+    '<p class="empty-bookmarks-msg">No bookmarks yet</p>',
   );
 }
