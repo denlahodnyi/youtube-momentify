@@ -27,6 +27,7 @@
   position-area: block-start;
   position-try-fallbacks: flip-block;
   z-index: 1000;
+  inline-size: 160px;
   margin-top: var(--d);
   padding: 10px;
   border: none;
@@ -54,6 +55,14 @@
       0 var(--d)
     );
   }
+}
+
+.momentify-mark-popup__title {
+  margin-block-end: 6px !important;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .momentify-mark-popup__close-btn {

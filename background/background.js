@@ -75,9 +75,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             if (tabs.length) {
               for (const tab of tabs) {
                 chrome.tabs.sendMessage(tab.id, {
-                  action: 'CONTENT/UPDATE_BOOKMARK_COLOR',
+                  action: 'CONTENT/UPDATE_BOOKMARK',
                   bookmarkId: bookmark.id,
                   color: bookmark.color,
+                  title: bookmark.title,
                 });
               }
             }

@@ -38,9 +38,9 @@ class ContentRenderer {
         const $video = document.body.querySelector('video');
 
         if ($video) {
-          const { id, time, color } = event.payload.bookmark;
+          const { id, time, title, color } = event.payload.bookmark;
           const mark = new Mark(
-            { id, time, color, duration: $video.duration },
+            { id, time, title, color, duration: $video.duration },
             { popupsContainerId: this.popupsContainerId },
           );
           mark.setMediator(this);
@@ -250,6 +250,7 @@ class ContentRenderer {
                 {
                   id: bm.id,
                   time: bm.time,
+                  title: bm.title,
                   color: bm.color,
                   duration,
                   loopStartId,
@@ -382,7 +383,7 @@ class Mark {
   youtubeVideContainerClassname = '.html5-video-player';
 
   constructor(
-    { id, time, color, duration, loopStartId, loopEndId },
+    { id, time, title, color, duration, loopStartId, loopEndId },
     { popupsContainerId },
   ) {
     this.id = id;
@@ -426,7 +427,8 @@ class Mark {
           <button aria-label="Close popup" data-action="close" class="momentify-default-btn momentify-mark-popup__close-btn">
             <svg aria-hidden xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x-icon lucide-x"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
           </button>
-          <button data-component="loop-btn" data-action="" class="momentify-default-btn momentify-mark-popup__loop-btn" hidden>
+          <h2 data-component="bookmark-title" class="momentify-mark-popup__title">${title}</h2>
+          <button data-component="loop-btn" data-action="momentify-mark-popup__title" class="momentify-default-btn momentify-mark-popup__loop-btn" hidden>
             <svg aria-hidden xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-repeat2-icon lucide-repeat-2"><path d="m2 9 3-3 3 3"/><path d="M13 18H7a2 2 0 0 1-2-2V6"/><path d="m22 15-3 3-3-3"/><path d="M11 6h6a2 2 0 0 1 2 2v10"/></svg>
             <span></span>
           </button>
@@ -602,6 +604,13 @@ class Mark {
     }
   }
 
+  static setBookmarkTitle(bookmarkId, title) {
+    const $title = Mark.findPopup(bookmarkId)?.querySelector(
+      '[data-component="bookmark-title"]',
+    );
+    if ($title) $title.textContent = title;
+  }
+
   handleMarkHoverOrClick(e) {
     document.querySelectorAll('[data-component="mark-popup"]').forEach(($p) => {
       $p.close();
@@ -770,12 +779,16 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       });
       break;
     }
-    case 'CONTENT/UPDATE_BOOKMARK_COLOR': {
-      const $mark = Mark.findMark(message.bookmarkId);
+    case 'CONTENT/UPDATE_BOOKMARK': {
+      const { bookmarkId, color, title } = message;
+      const $mark = Mark.findMark(bookmarkId);
 
       if ($mark) {
-        $mark.style.backgroundColor = message.color;
+        $mark.style.backgroundColor = color;
       }
+
+      Mark.setBookmarkTitle(bookmarkId, title);
+
       break;
     }
     case 'CONTENT/DELETE_BOOKMARK': {
