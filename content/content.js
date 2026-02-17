@@ -3,7 +3,7 @@ console.log('SCRIPT RUNNING');
 const BOOKMARK_BTN_ID = 'momentify-bookmark-btn';
 const TIMESTAMPS_OUTER_CONTAINER_ID = 'momentify-bar';
 const TIMESTAMPS_INNER_CONTAINER_ID = 'momentify-bookmarks-container';
-const MARK_DEFAULT_COLOR = '#FF7F50';
+const BOOKMARK_TITLE_CONSTRAINS = { min: 1, max: 80 };
 
 class ContentRenderer {
   state = {
@@ -16,12 +16,21 @@ class ContentRenderer {
   BookmarkButton;
   ProgressBar;
   Mark;
+  BookmarkEditModalCreator;
   services;
+  bookmarkModal;
 
-  constructor(BookmarkButton, ProgressBar, Mark, Services) {
+  constructor({
+    BookmarkButton,
+    ProgressBar,
+    Mark,
+    BookmarkEditModal,
+    Services,
+  }) {
     this.BookmarkButton = BookmarkButton;
     this.ProgressBar = ProgressBar;
     this.Mark = Mark;
+    this.BookmarkEditModalCreator = BookmarkEditModal;
     this.services = Services;
 
     this.boundLoopHandler = this.handleLoop.bind(this);
@@ -38,9 +47,9 @@ class ContentRenderer {
         const $video = document.body.querySelector('video');
 
         if ($video) {
-          const { id, time, title, color } = event.payload.bookmark;
+          const { bookmark } = event.payload;
           const mark = new Mark(
-            { id, time, title, color, duration: $video.duration },
+            { bookmark, duration: $video.duration },
             { popupsContainerId: this.popupsContainerId },
           );
           mark.setMediator(this);
@@ -65,6 +74,26 @@ class ContentRenderer {
           console.error('[momentify] No video element found');
         }
 
+        break;
+      }
+      case 'renderer/update_bookmark': {
+        await this.services.updateBookmark(event.payload.bookmark);
+        break;
+      }
+      case 'renderer/update_bookmark_ui': {
+        const { bookmark } = event.payload;
+
+        const markInstance = Mark.getInstance(bookmark.id);
+
+        if (markInstance) markInstance.syncState({ bookmark });
+
+        break;
+      }
+      case 'renderer/open_bookmark_edit_modal': {
+        const { bookmark } = event.payload || {};
+        document.querySelector('video')?.pause();
+        this.bookmarkModal.syncState({ bookmark });
+        this.bookmarkModal.open();
         break;
       }
       case 'renderer/delete_bookmark': {
@@ -170,6 +199,7 @@ class ContentRenderer {
   render() {
     this.renderPopupsContainer();
     this.renderBookmarkButton();
+    this.renderBookmarkEditModal();
     this.renderProgressBar();
   }
 
@@ -248,10 +278,7 @@ class ContentRenderer {
             bookmarksRes.list.forEach((bm) => {
               const mark = new this.Mark(
                 {
-                  id: bm.id,
-                  time: bm.time,
-                  title: bm.title,
-                  color: bm.color,
+                  bookmark: bm,
                   duration,
                   loopStartId,
                   loopEndId,
@@ -272,6 +299,15 @@ class ContentRenderer {
           console.error('[momentify] Cannot find video element');
         }
       }
+    }
+  }
+
+  renderBookmarkEditModal() {
+    if (!this.bookmarkModal) {
+      const modal = new this.BookmarkEditModalCreator();
+      this.bookmarkModal = modal;
+      this.bookmarkModal.setMediator(this);
+      document.body.append(modal.dom);
     }
   }
 
@@ -380,13 +416,17 @@ class ProgressBar {
 }
 
 class Mark {
-  youtubeVideContainerClassname = '.html5-video-player';
+  static youtubeVideContainerClassname = '.html5-video-player';
+  mediator;
+  popupsContainerId;
+  state = { id: null, bookmark: null };
 
   constructor(
-    { id, time, title, color, duration, loopStartId, loopEndId },
+    { bookmark, duration, loopStartId, loopEndId },
     { popupsContainerId },
   ) {
-    this.id = id;
+    const { id, time, title, color } = bookmark;
+    this.state = { id, bookmark };
     this.popupsContainerId = popupsContainerId;
 
     this.dom = createDomElement(`
@@ -424,24 +464,28 @@ class Mark {
         style="position-anchor: --mark-${id};"
       >
         <div>
-          <button aria-label="Close popup" data-action="close" class="momentify-default-btn momentify-mark-popup__close-btn">
+          <button aria-label="Close popup" data-action="close" class="momentify-btn momentify-mark-popup__close-btn">
             <svg aria-hidden xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x-icon lucide-x"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
           </button>
           <h2 data-component="bookmark-title" class="momentify-mark-popup__title">${title}</h2>
-          <button data-component="loop-btn" data-action="momentify-mark-popup__title" class="momentify-default-btn momentify-mark-popup__loop-btn" hidden>
+          <button data-component="loop-btn" data-action="momentify-mark-popup__title" class="full-w momentify-btn momentify-mark-popup__loop-btn" hidden>
             <svg aria-hidden xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-repeat2-icon lucide-repeat-2"><path d="m2 9 3-3 3 3"/><path d="M13 18H7a2 2 0 0 1-2-2V6"/><path d="m22 15-3 3-3-3"/><path d="M11 6h6a2 2 0 0 1 2 2v10"/></svg>
             <span></span>
           </button>
           <span data-component="loop-label" class="momentify-mark-popup__loop-label" hidden>
             <span></span>
-            <button aria-label="Remove loop" data-component="loop-del-btn" data-action="remove-loop" class="momentify-default-btn momentify-mark-popup__del-loop-btn">
+            <button aria-label="Remove loop" data-component="loop-del-btn" data-action="remove-loop" class="momentify-btn momentify-mark-popup__del-loop-btn">
               <svg aria-hidden xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-delete-icon lucide-delete"><path d="M10 5a2 2 0 0 0-1.344.519l-6.328 5.74a1 1 0 0 0 0 1.481l6.328 5.741A2 2 0 0 0 10 19h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2z"/><path d="m12 9 6 6"/><path d="m18 9-6 6"/></svg>
             </button>
           </span>
-          <button data-action="delete" class="momentify-default-btn momentify-mark-popup__del-btn">
-            <svg aria-hidden xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trash2-icon lucide-trash-2"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-            Remove bookmark
-          </button>
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+            <button aria-label="Edit bookmark" data-action="edit" class="full-w momentify-btn">
+              <svg aria-hidden xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-square-pen-icon lucide-square-pen"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"/></svg>
+            </button>
+            <button aria-label="Remove bookmark" data-action="delete" class="full-w momentify-btn momentify-mark-popup__del-btn">
+              <svg aria-hidden xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trash2-icon lucide-trash-2"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
+          </div>
         </div>
       </dialog>
     `);
@@ -454,6 +498,9 @@ class Mark {
     this.popup
       .querySelector('[data-action="delete"]')
       .addEventListener('click', this.handleDeleteBookmark.bind(this));
+    this.popup
+      .querySelector('[data-action="edit"]')
+      .addEventListener('click', this.handleEditBookmark.bind(this));
     this.popup
       .querySelector('[data-component="loop-del-btn"]')
       .addEventListener('click', this.handleLoopDelete.bind(this));
@@ -505,10 +552,12 @@ class Mark {
     document.getElementById(this.popupsContainerId)?.append($popupWrapper);
 
     this.boundedHandlePopupClickAway = this.handlePopupClickAway.bind(this);
+
+    this.#setDomState();
   }
 
-  setMediator(mediator) {
-    this.mediator = mediator;
+  static find(bookmarkId) {
+    return document.getElementById(this.createMarkWrapperDomId(bookmarkId));
   }
 
   static findMark(bookmarkId) {
@@ -565,6 +614,28 @@ class Mark {
     });
   }
 
+  static getInstance(bookmarkId) {
+    return Mark.find(bookmarkId)?._state?.instance;
+  }
+
+  setMediator(mediator) {
+    this.mediator = mediator;
+  }
+
+  #setDomState() {
+    this.dom._state = { instance: this };
+  }
+
+  syncState({ bookmark }) {
+    this.state = { id: bookmark.id, bookmark };
+    this.mark.style.backgroundColor = bookmark.color;
+    const $popupTitle = this.popup.querySelector(
+      '[data-component="bookmark-title"]',
+    );
+    if ($popupTitle) $popupTitle.textContent = bookmark.title;
+    this.#setDomState();
+  }
+
   static syncMarkLoopUI($mark) {
     const id = this.getBookmarkIdFromDom($mark);
     const $loopMarks = this.findLoopMarks();
@@ -604,20 +675,13 @@ class Mark {
     }
   }
 
-  static setBookmarkTitle(bookmarkId, title) {
-    const $title = Mark.findPopup(bookmarkId)?.querySelector(
-      '[data-component="bookmark-title"]',
-    );
-    if ($title) $title.textContent = title;
-  }
-
   handleMarkHoverOrClick(e) {
     document.querySelectorAll('[data-component="mark-popup"]').forEach(($p) => {
       $p.close();
     });
     this.popup.show();
     document
-      .querySelector(this.youtubeVideContainerClassname)
+      .querySelector(Mark.youtubeVideContainerClassname)
       ?.addEventListener('click', this.boundedHandlePopupClickAway, {
         capture: true,
       });
@@ -634,7 +698,7 @@ class Mark {
     if (!Mark.isInPopup(e.target)) {
       Mark.closeAllPopups();
       document
-        .querySelector(this.youtubeVideContainerClassname)
+        .querySelector(Mark.youtubeVideContainerClassname)
         ?.removeEventListener('click', this.boundedHandlePopupClickAway, {
           capture: true,
         });
@@ -644,7 +708,15 @@ class Mark {
   handleDeleteBookmark(e) {
     this.mediator.notify(this, {
       type: 'renderer/delete_bookmark',
-      payload: { bookmarkId: this.id },
+      payload: { bookmarkId: this.state.id },
+    });
+  }
+
+  handleEditBookmark() {
+    this.popup.close();
+    this.mediator.notify(this, {
+      type: 'renderer/open_bookmark_edit_modal',
+      payload: { bookmark: this.state.bookmark },
     });
   }
 
@@ -664,7 +736,7 @@ class Mark {
         type: 'renderer/save_loop',
         payload: {
           loopStartId: Mark.getBookmarkIdFromDom($loopMarks[0]),
-          loopEndId: this.id,
+          loopEndId: this.state.id,
         },
       });
     }
@@ -704,6 +776,158 @@ class Mark {
   }
 }
 
+class BookmarkEditModal {
+  static colors = {
+    DarkCyan: '#008b8b'.toLowerCase(),
+    DeepSkyBlue: '#00bfff'.toLowerCase(),
+    MediumSlateBlue: '#7b68ee'.toLowerCase(),
+    LightGreen: '#90ee90'.toLowerCase(),
+    Coral: '#ff7f50'.toLowerCase(),
+    NavajoWhite: '#FFDEAD'.toLowerCase(),
+    Violet: '#ee82ee'.toLowerCase(),
+    Yellow: '#FFFF00'.toLowerCase(),
+  };
+
+  state = { bookmark: null };
+  mediator;
+
+  constructor() {
+    this.dom = createDomElement(`
+      <dialog id="momentify-edit-modal" closedby="any" aria-label="Edit bookmark details" class="momentify-edit-modal">
+        <form id="momentify-edit-modal-form" method="dialog" class="momentify-edit-modal__form">
+          <div class="momentify-edit-modal__text-field">
+            <label for="momentify-edit-modal-title" class="momentify-edit-modal__label">Title</label>
+            <input
+              id="momentify-edit-modal-title"
+              aria-describedby="momentify-edit-modal-title-chars"
+              name="title"
+              minlength="${BOOKMARK_TITLE_CONSTRAINS.min}"
+              maxlength="${BOOKMARK_TITLE_CONSTRAINS.max}"
+              required
+              class="momentify-edit-modal__input"
+            />
+            <p id="momentify-edit-modal-title-chars" aria-live="polite" aria-atomic="false" class="momentify-edit-modal__helper-message">
+              <span class="scr-only">Characters remaining</span>
+              <span data-component="momentify-edit-modal-title-chars-count">0</span>/<span>${BOOKMARK_TITLE_CONSTRAINS.max}</span>
+            </p>
+          </div>
+          <fieldset data-component="color-picker" class="momentify-edit-modal__color-picker">
+            <legend class="momentify-edit-modal__label">Color</legend>
+            <template id="momentify-color-picker-template">
+              <label
+                data-component="color-picker-item-label"
+                class="momentify-edit-modal__color-option"
+              >
+                <span data-component="color-picker-item-name" class="scr-only"></span>
+                <input type="radio" name="color" value="" required class="scr-only" data-component="color-picker-item-input" />
+              </label>
+            </template>
+          </fieldset>
+          <div class="momentify-edit-modal__footer">
+            <button id="momentify-edit-modal-save" type="submit" class="momentify-btn momentify-edit-modal__action">Save</button>
+            <button id="momentify-edit-modal-cancel" type="button" command="close" commandfor="momentify-edit-modal" class="momentify-btn momentify-edit-modal__action">Cancel</button>
+          </div>
+        </form>
+      </dialog>
+    `);
+
+    const colorOptions = Object.entries(BookmarkEditModal.colors).map(
+      ([color, hex]) => {
+        const $colorOption = this.dom
+          .querySelector('#momentify-color-picker-template')
+          .content.firstElementChild.cloneNode(true);
+        $colorOption.style.backgroundColor = hex;
+        $colorOption.querySelector(
+          '[data-component="color-picker-item-name"]',
+        ).style.backgroundColor = color;
+        $colorOption.querySelector(
+          '[data-component="color-picker-item-input"]',
+        ).value = hex;
+        return $colorOption;
+      },
+    );
+
+    this.dom
+      .querySelector('[data-component="color-picker"]')
+      .append(...colorOptions);
+
+    const $titleInput = this.dom.querySelector('#momentify-edit-modal-title');
+    const $titleCharsCount = this.dom.querySelector(
+      '[data-component="momentify-edit-modal-title-chars-count"]',
+    );
+    $titleInput.addEventListener('input', (e) => {
+      $titleCharsCount.textContent = e.target.value.length;
+    });
+
+    this.dom
+      .querySelector('#momentify-edit-modal-form')
+      .addEventListener('submit', this.handleSubmit.bind(this));
+  }
+
+  static find() {
+    return document.getElementById('momentify-edit-modal');
+  }
+
+  setMediator(mediator) {
+    this.mediator = mediator;
+  }
+
+  syncState(state) {
+    if (state.bookmark) {
+      this.state.bookmark = state.bookmark;
+      this.dom.querySelector('#momentify-edit-modal-title').value =
+        state.bookmark.title;
+      this.dom.querySelector(
+        '[data-component="momentify-edit-modal-title-chars-count"]',
+      ).textContent = state.bookmark.title.length;
+      const isAvailableColor = Object.values(BookmarkEditModal.colors).includes(
+        state.bookmark.color.toLowerCase(),
+      );
+      this.dom
+        .querySelectorAll('[data-component="color-picker-item-input"]')
+        .forEach(($input, i) => {
+          $input.checked = false;
+
+          if (isAvailableColor) {
+            if ($input.value === state.bookmark.color.toLowerCase())
+              $input.checked = true;
+          } else if (i === 0) {
+            $input.checked = true;
+          }
+        });
+    }
+  }
+
+  open() {
+    this.dom.showModal();
+  }
+
+  handleSubmit(e) {
+    const data = new FormData(e.target);
+    const title = data.get('title');
+    const color = data.get('color');
+
+    if (this.mediator) {
+      if (this.state.bookmark) {
+        this.mediator.notify(this, {
+          type: 'renderer/update_bookmark',
+          payload: { bookmark: { ...this.state.bookmark, title, color } },
+        });
+      } else {
+        // TODO: save new one
+        // this.mediator.notify(this, { type: '', bookmark: { title, color,
+        // duration, videoId } });
+      }
+    } else {
+      console.error('[momentify] Please, set mediator');
+    }
+  }
+
+  handleCancel() {
+    this.close();
+  }
+}
+
 class Services {
   static async createBookmark({ time, videoId, title }) {
     return await chrome.runtime.sendMessage({
@@ -711,6 +935,12 @@ class Services {
       time,
       videoId,
       title,
+    });
+  }
+  static async updateBookmark(bookmark) {
+    return await chrome.runtime.sendMessage({
+      action: 'UPDATE_BOOKMARK',
+      bookmark,
     });
   }
 
@@ -752,12 +982,13 @@ class Services {
   }
 }
 
-const contentRenderer = new ContentRenderer(
+const contentRenderer = new ContentRenderer({
   BookmarkButton,
   ProgressBar,
   Mark,
+  BookmarkEditModal,
   Services,
-);
+});
 contentRenderer.render();
 
 chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
@@ -780,14 +1011,10 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       break;
     }
     case 'CONTENT/UPDATE_BOOKMARK': {
-      const { bookmarkId, color, title } = message;
-      const $mark = Mark.findMark(bookmarkId);
-
-      if ($mark) {
-        $mark.style.backgroundColor = color;
-      }
-
-      Mark.setBookmarkTitle(bookmarkId, title);
+      await contentRenderer.notify(null, {
+        type: 'renderer/update_bookmark_ui',
+        payload: { bookmark: message.bookmark },
+      });
 
       break;
     }

@@ -76,9 +76,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               for (const tab of tabs) {
                 chrome.tabs.sendMessage(tab.id, {
                   action: 'CONTENT/UPDATE_BOOKMARK',
-                  bookmarkId: bookmark.id,
-                  color: bookmark.color,
-                  title: bookmark.title,
+                  bookmark: result.bookmark,
                 });
               }
             }
@@ -87,7 +85,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           sendResponse(
             result?.error
               ? { success: false, error: result.error }
-              : { success: true },
+              : { success: true, bookmark: result.bookmark },
           );
           break;
         }
@@ -431,11 +429,17 @@ function updateBookmark(db, bookmark) {
         error: `Bookmark note must be less than ${BOOKMARK_NOTE_CONSTRAINS.max} characters`,
       });
     }
+    if (!bookmark.color) {
+      // TODO: validate hex?
+      resolve({ error: 'Bookmark color must present' });
+    }
 
     const req = bmStore.put(bookmark);
 
     req.onsuccess = () => {
-      resolve();
+      bmStore.get(req.result).onsuccess = (e) => {
+        resolve({ bookmark: e.target.result });
+      };
     };
 
     req.onerror = () => {
