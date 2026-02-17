@@ -1,6 +1,7 @@
 // TODO: fix context loose error (https://stackoverflow.com/questions/53939205/how-to-avoid-extension-context-invalidated-errors-when-messaging-after-an-exte)
 console.log('SCRIPT RUNNING');
-const BOOKMARK_BTN_ID = 'momentify-bookmark-btn';
+const QUICK_SAVE_BTN_ID = 'momentify-save-bookmark-btn';
+const SAVE_WITH_EDIT_BTN_ID = 'momentify-save-with-edit-bookmark-btn';
 const TIMESTAMPS_OUTER_CONTAINER_ID = 'momentify-bar';
 const TIMESTAMPS_INNER_CONTAINER_ID = 'momentify-bookmarks-container';
 const BOOKMARK_TITLE_CONSTRAINS = { min: 1, max: 80 };
@@ -68,14 +69,17 @@ class ContentRenderer {
         break;
       }
       case 'api/save_bookmark': {
-        const video = document.body.querySelector('video');
-        const title = document.title.split(' - YouTube')[0];
+        const { color = null, title = null, time = null } = event.payload || {};
+        const $video = document.querySelector('video');
+        const videoTitle = getVideoTitle();
 
-        if (video) {
+        if ($video) {
           await this.services.createBookmark({
-            time: video.currentTime,
-            title,
+            videoTitle,
             videoId: this.state.videoId,
+            time: time ?? $video.currentTime,
+            title,
+            color,
           });
         } else {
           console.error('[momentify] No video element found');
@@ -96,9 +100,15 @@ class ContentRenderer {
         break;
       }
       case 'ui/open_bookmark_edit_modal': {
-        const { bookmark } = event.payload || {};
-        document.querySelector('video')?.pause();
-        this.bookmarkModal.syncState({ bookmark });
+        const { bookmark, isNewBookmark = false } = event.payload || {};
+        const $video = document.querySelector('video');
+        $video?.pause();
+        this.bookmarkModal.syncState({
+          isNewBookmark,
+          bookmark: isNewBookmark
+            ? { title: new Date().toLocaleString(), time: $video.currentTime }
+            : bookmark,
+        });
         this.bookmarkModal.open();
         break;
       }
@@ -228,14 +238,23 @@ class ContentRenderer {
 
   renderBookmarkButton() {
     if (this.state.videoId && !BookmarkButton.find()) {
-      const button = new this.BookmarkButton();
-      button.setMediator(this);
+      const quickSaveButton = new this.BookmarkButton();
+      const saveWithEditButton = new this.BookmarkButton(true);
+      quickSaveButton.setMediator(this);
+      saveWithEditButton.setMediator(this);
       const $controlsContainer = document.body.querySelector(
         '#movie_player .ytp-right-controls',
       );
 
       if ($controlsContainer) {
-        $controlsContainer.insertAdjacentElement('afterbegin', button.dom);
+        $controlsContainer.insertAdjacentElement(
+          'afterbegin',
+          quickSaveButton.dom,
+        );
+        $controlsContainer.insertAdjacentElement(
+          'afterbegin',
+          saveWithEditButton.dom,
+        );
       } else {
         console.error('No controls container found');
       }
@@ -377,9 +396,16 @@ function observeUrlChange(cb) {
 }
 
 class BookmarkButton {
-  constructor() {
+  id;
+  isQuick = false;
+
+  constructor(isQuick = false) {
+    this.isQuick = isQuick;
+    this.id = isQuick ? QUICK_SAVE_BTN_ID : SAVE_WITH_EDIT_BTN_ID;
+    const color = isQuick ? 'red' : 'blue';
+    const label = isQuick ? 'Save quick bookmark' : 'Edit and save bookmark';
     const $button = createDomElement(`
-        <button id=${BOOKMARK_BTN_ID} aria-label="Save bookmark" class="ytp-button" style="display: flex; align-items: center; justify-content: center;">
+        <button id=${this.id} aria-label="${label}" class="ytp-button" style="display: flex; align-items: center; justify-content: center; color: ${color}">
           <svg aria-hidden xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-bookmark-icon lucide-bookmark"><path d="M17 3a2 2 0 0 1 2 2v15a1 1 0 0 1-1.496.868l-4.512-2.578a2 2 0 0 0-1.984 0l-4.512 2.578A1 1 0 0 1 5 20V5a2 2 0 0 1 2-2z"/></svg>
         </button>
       `);
@@ -392,11 +418,18 @@ class BookmarkButton {
   }
 
   handleSaveBookmark() {
-    this.mediator?.notify(this, { type: 'api/save_bookmark' });
+    if (this.isQuick) {
+      this.mediator?.notify(this, { type: 'api/save_bookmark' });
+    } else {
+      this.mediator?.notify(this, {
+        type: 'ui/open_bookmark_edit_modal',
+        payload: { isNewBookmark: true },
+      });
+    }
   }
 
   static find() {
-    return document.getElementById(BOOKMARK_BTN_ID);
+    return document.getElementById(this.id);
   }
 }
 
@@ -817,7 +850,7 @@ class BookmarkEditModal {
     Yellow: '#FFFF00'.toLowerCase(),
   };
 
-  state = { bookmark: null };
+  state = { bookmark: null, isNew: false };
   mediator;
 
   constructor() {
@@ -902,6 +935,8 @@ class BookmarkEditModal {
   }
 
   syncState(state) {
+    this.state.isNew = state.isNewBookmark;
+
     if (state.bookmark) {
       this.state.bookmark = state.bookmark;
       this.dom.querySelector('#momentify-edit-modal-title').value =
@@ -910,7 +945,7 @@ class BookmarkEditModal {
         '[data-component="momentify-edit-modal-title-chars-count"]',
       ).textContent = state.bookmark.title.length;
       const isAvailableColor = Object.values(BookmarkEditModal.colors).includes(
-        state.bookmark.color.toLowerCase(),
+        state.bookmark.color?.toLowerCase(),
       );
       this.dom
         .querySelectorAll('[data-component="color-picker-item-input"]')
@@ -918,8 +953,9 @@ class BookmarkEditModal {
           $input.checked = false;
 
           if (isAvailableColor) {
-            if ($input.value === state.bookmark.color.toLowerCase())
+            if ($input.value === state.bookmark.color.toLowerCase()) {
               $input.checked = true;
+            }
           } else if (i === 0) {
             $input.checked = true;
           }
@@ -937,15 +973,16 @@ class BookmarkEditModal {
     const color = data.get('color');
 
     if (this.mediator) {
-      if (this.state.bookmark) {
+      if (this.state.isNew) {
+        this.mediator.notify(this, {
+          type: 'api/save_bookmark',
+          payload: { title, color, time: this.state.bookmark.time },
+        });
+      } else {
         this.mediator.notify(this, {
           type: 'api/update_bookmark',
           payload: { bookmark: { ...this.state.bookmark, title, color } },
         });
-      } else {
-        // TODO: save new one
-        // this.mediator.notify(this, { type: '', bookmark: { title, color,
-        // duration, videoId } });
       }
     } else {
       console.error('[momentify] Please, set mediator');
@@ -958,12 +995,10 @@ class BookmarkEditModal {
 }
 
 class Services {
-  static async createBookmark({ time, videoId, title }) {
+  static async createBookmark(payload) {
     return await chrome.runtime.sendMessage({
       action: 'CREATE_BOOKMARK',
-      time,
-      videoId,
-      title,
+      ...payload,
     });
   }
   static async updateBookmark(bookmark) {
@@ -1060,6 +1095,10 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       console.warn('Unknown action:', message.action);
   }
 });
+
+function getVideoTitle() {
+  return document.title.split(' - YouTube')[0];
+}
 
 function getVideoIdFromUrl(url) {
   const params = getVideoPageUrlParams(url);

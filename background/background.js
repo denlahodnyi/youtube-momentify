@@ -14,10 +14,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       switch (message.action) {
         case 'CREATE_BOOKMARK': {
-          const { video, bookmark } = await createBookmark(db, message);
+          const { video, bookmark, error } = await createBookmark(db, message);
           const tabs = await getCurrentVideoTabs(video.videoId);
 
-          if (tabs.length) {
+          if (!error && tabs.length) {
             for (const tab of tabs) {
               chrome.tabs.sendMessage(tab.id, {
                 action: 'CONTENT/CREATE_BOOKMARK',
@@ -26,7 +26,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             }
           }
 
-          sendResponse({ success: true, video, bookmark });
+          sendResponse({ success: !!error, video, bookmark, error });
           break;
         }
         case 'GET_VIDEOS_WITH_BOOKMARKS': {
@@ -250,7 +250,7 @@ function createBookmark(db, payload) {
       if (!video) {
         videoStore.add({
           videoId: payload.videoId,
-          title: payload.title,
+          title: payload.videoTitle,
           loopStartId: null,
           loopEndId: null,
           createdAt: new Date().getTime(),
@@ -262,12 +262,22 @@ function createBookmark(db, payload) {
       }
     };
 
+    if (
+      payload.title &&
+      (payload.title.length < BOOKMARK_TITLE_CONSTRAINS.min ||
+        payload.title.length > BOOKMARK_TITLE_CONSTRAINS.max)
+    ) {
+      resolve({
+        error: `Bookmark title must be between ${BOOKMARK_TITLE_CONSTRAINS.min} and ${BOOKMARK_TITLE_CONSTRAINS.max} characters`,
+      });
+    }
+
     t.objectStore('bookmarks').add({
       videoId: payload.videoId,
       time: payload.time,
-      title: new Date().toLocaleString(),
+      title: payload.title ?? new Date().toLocaleString(),
       note: '',
-      color: DEFAULT_MARK_COLOR,
+      color: payload.color ?? DEFAULT_MARK_COLOR,
       createdAt: new Date().getTime(),
     }).onsuccess = (e) => {
       t.objectStore('bookmarks').get(e.target.result).onsuccess = (ev) => {
