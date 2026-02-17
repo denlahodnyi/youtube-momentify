@@ -8,8 +8,8 @@ const BOOKMARK_TITLE_CONSTRAINS = { min: 1, max: 80 };
 class ContentRenderer {
   state = {
     videoId: getVideoIdFromUrl(location.href),
-    loopStart: 0,
-    loopEnd: 0,
+    loopStartTime: 0,
+    loopEndTime: 0,
   };
   popupsContainerId = 'momentify-bookmark-popups-container';
 
@@ -43,24 +43,31 @@ class ContentRenderer {
 
   async notify(sender, event) {
     switch (event.type) {
-      case 'renderer/render_bookmark': {
+      case 'ui/play_video': {
+        const video = document.body.querySelector('video');
+
+        // TODO: what if there is loop presence?
+        if (video) {
+          video.currentTime = event.payload.time;
+          video.play();
+        }
+
+        break;
+      }
+      case 'ui/render_bookmark': {
         const $video = document.body.querySelector('video');
 
         if ($video) {
           const { bookmark } = event.payload;
-          const mark = new Mark(
-            { bookmark, duration: $video.duration },
-            { popupsContainerId: this.popupsContainerId },
-          );
-          mark.setMediator(this);
-          ProgressBar.findMarksContainer()?.append(mark.dom);
+          const mark = this.buildBookmark(bookmark, $video.duration);
+          ProgressBar.pushBookmark(mark.dom);
         } else {
           console.error('[momentify] No video element found');
         }
 
         break;
       }
-      case 'renderer/save_bookmark': {
+      case 'api/save_bookmark': {
         const video = document.body.querySelector('video');
         const title = document.title.split(' - YouTube')[0];
 
@@ -76,41 +83,47 @@ class ContentRenderer {
 
         break;
       }
-      case 'renderer/update_bookmark': {
+      case 'api/update_bookmark': {
         await this.services.updateBookmark(event.payload.bookmark);
         break;
       }
-      case 'renderer/update_bookmark_ui': {
+      case 'ui/update_bookmark': {
         const { bookmark } = event.payload;
-
         const markInstance = Mark.getInstance(bookmark.id);
 
         if (markInstance) markInstance.syncState({ bookmark });
 
         break;
       }
-      case 'renderer/open_bookmark_edit_modal': {
+      case 'ui/open_bookmark_edit_modal': {
         const { bookmark } = event.payload || {};
         document.querySelector('video')?.pause();
         this.bookmarkModal.syncState({ bookmark });
         this.bookmarkModal.open();
         break;
       }
-      case 'renderer/delete_bookmark': {
+      case 'api/delete_bookmark': {
         const { bookmarkId } = event.payload;
-        const result = await this.services.deleteBookmark({ bookmarkId });
-
-        if (result.success) {
-          await this.notify(null, {
-            type: 'renderer/clear_loop_ui_by_bookmarkId',
-            payload: { bookmarkId },
-          });
-
-          Mark.removeMark(bookmarkId);
-        }
+        await this.services.deleteBookmark({ bookmarkId });
         break;
       }
-      case 'renderer/save_loop': {
+      case 'ui/delete_bookmark': {
+        const { bookmarkId } = event.payload;
+
+        await this.notify(null, {
+          type: 'ui/clear_loop_ui_by_bookmarkId',
+          payload: { bookmarkId },
+        });
+        Mark.removeMark(bookmarkId);
+
+        break;
+      }
+      case 'ui/delete_all_bookmarks': {
+        ProgressBar.clearContent();
+        this.removeVideoLoop();
+        break;
+      }
+      case 'api/save_loop': {
         const { loopStartId, loopEndId } = event.payload;
         const result = await this.services.saveLoop({
           videoId: this.state.videoId,
@@ -128,16 +141,14 @@ class ContentRenderer {
                 this.Mark.getBookmarkIdFromDom($m) !== loopEndId,
             )
             .forEach(($m) => {
-              delete $m.dataset.loop;
               this.Mark.syncMarkLoopUI($m);
             });
-          sender.mark.dataset.loop = 'finish';
-          this.Mark.syncMarkLoopUI(sender.mark);
-          this.setupDomLoop(loopStartId, loopEndId);
+          this.Mark.syncMarkLoopUI(sender.mark, 'finish');
+          this.setupVideoLoop(loopStartId, loopEndId);
         }
         break;
       }
-      case 'renderer/delete_loop': {
+      case 'api/delete_loop': {
         const $loopMarks = this.Mark.findLoopMarks(
           this.ProgressBar.findMarksContainer(),
         );
@@ -148,30 +159,28 @@ class ContentRenderer {
           });
 
           if (result.success) {
-            this.notify(null, { type: 'renderer/clear_loop_ui' });
+            this.notify(null, { type: 'ui/clear_loop_ui' });
           }
         } else {
-          delete sender.mark.dataset.loop;
           this.Mark.syncMarkLoopUI(sender.mark);
         }
         break;
       }
-      case 'renderer/clear_loop_ui': {
-        this.removeDomLoop();
+      case 'ui/clear_loop_ui': {
+        this.removeVideoLoop();
         const $loopMarks = this.Mark.findLoopMarks(
           this.ProgressBar.findMarksContainer(),
         );
+
         if ($loopMarks[0]) {
-          delete $loopMarks[0].dataset.loop;
           this.Mark.syncMarkLoopUI($loopMarks[0]);
         }
         if ($loopMarks[1]) {
-          delete $loopMarks[1].dataset.loop;
           this.Mark.syncMarkLoopUI($loopMarks[1]);
         }
         break;
       }
-      case 'renderer/clear_loop_ui_by_bookmarkId': {
+      case 'ui/clear_loop_ui_by_bookmarkId': {
         const { bookmarkId } = event.payload;
         const $loopMarks = this.Mark.findLoopMarks(
           this.ProgressBar.findMarksContainer(),
@@ -182,9 +191,7 @@ class ContentRenderer {
           const endId = this.Mark.getBookmarkIdFromDom($loopMarks[1]);
 
           if (startId === bookmarkId || endId === bookmarkId) {
-            this.removeDomLoop();
-            delete $loopMarks[0].dataset.loop;
-            delete $loopMarks[1].dataset.loop;
+            this.removeVideoLoop();
             this.Mark.syncMarkLoopUI($loopMarks[0]);
             this.Mark.syncMarkLoopUI($loopMarks[1]);
           }
@@ -276,23 +283,19 @@ class ContentRenderer {
             const { loopStartId, loopEndId } = videoRes.video;
 
             bookmarksRes.list.forEach((bm) => {
-              const mark = new this.Mark(
-                {
-                  bookmark: bm,
-                  duration,
-                  loopStartId,
-                  loopEndId,
-                },
-                { popupsContainerId: this.popupsContainerId },
+              const mark = this.buildBookmark(
+                bm,
+                duration,
+                loopStartId,
+                loopEndId,
               );
-              mark.setMediator(this);
               $marksContainer.append(mark.dom);
             });
 
             if (loopStartId && loopEndId) {
-              this.setupDomLoop(loopStartId, loopEndId);
+              this.setupVideoLoop(loopStartId, loopEndId);
             } else {
-              this.removeDomLoop();
+              this.removeVideoLoop();
             }
           }
         } else {
@@ -311,7 +314,8 @@ class ContentRenderer {
     }
   }
 
-  setupDomLoop(loopStartId, loopEndId) {
+  setupVideoLoop(loopStartId, loopEndId) {
+    this.removeVideoLoop();
     const $startMark = this.Mark.findMark(loopStartId);
     const $endMark = this.Mark.findMark(loopEndId);
 
@@ -319,26 +323,41 @@ class ContentRenderer {
       const $video = document.querySelector('video');
       const startTime = Number($startMark.dataset.time);
       const endTime = Number($endMark.dataset.time);
-      this.state.loopStart = Math.min(startTime, endTime);
-      this.state.loopEnd = Math.max(startTime, endTime);
+      this.state.loopStartTime = Math.min(startTime, endTime);
+      this.state.loopEndTime = Math.max(startTime, endTime);
 
       $video.addEventListener('timeupdate', this.boundLoopHandler);
     }
   }
 
-  removeDomLoop() {
+  removeVideoLoop() {
     const $video = document.querySelector('video');
     $video.removeEventListener('timeupdate', this.boundLoopHandler);
-    this.state.loopStart = 0;
-    this.state.loopEnd = 0;
+    this.state.loopStartTime = 0;
+    this.state.loopEndTime = 0;
   }
 
   handleLoop(e) {
-    if (e.target.currentTime >= this.state.loopEnd) {
-      e.target.currentTime = this.state.loopStart;
-    } else if (e.target.currentTime < this.state.loopStart) {
-      e.target.currentTime = this.state.loopStart;
+    if (e.target.currentTime >= this.state.loopEndTime) {
+      e.target.currentTime = this.state.loopStartTime;
+    } else if (e.target.currentTime < this.state.loopStartTime) {
+      e.target.currentTime = this.state.loopStartTime;
     }
+  }
+
+  buildBookmark(bookmark, duration, loopStartId, loopEndId) {
+    const mark = new this.Mark(
+      {
+        bookmark,
+        duration,
+        loopStartId,
+        loopEndId,
+      },
+      { popupsContainerId: this.popupsContainerId },
+    );
+    mark.setMediator(this);
+
+    return mark;
   }
 }
 
@@ -373,7 +392,7 @@ class BookmarkButton {
   }
 
   handleSaveBookmark() {
-    this.mediator?.notify(this, { type: 'renderer/save_bookmark' });
+    this.mediator?.notify(this, { type: 'api/save_bookmark' });
   }
 
   static find() {
@@ -412,6 +431,10 @@ class ProgressBar {
   static clearContent() {
     const $container = this.findMarksContainer();
     if ($container) $container.innerHTML = '';
+  }
+
+  static pushBookmark($bookmark) {
+    ProgressBar.findMarksContainer()?.append($bookmark);
   }
 }
 
@@ -524,16 +547,16 @@ class Mark {
       "></div>
     `);
 
-    if (loopStartId === id) {
-      this.mark.dataset.loop = 'start';
-      this.loopSign.style.display = 'block';
-    } else if (loopEndId === id) {
-      this.mark.dataset.loop = 'finish';
-      this.loopSign.style.display = 'block';
-    }
-
     this.dom.append(this.mark);
     this.dom.append(this.loopSign);
+
+    if (loopStartId === id) {
+      Mark.syncLoopUI(this.mark, this.popup, this.loopSign, 'start');
+    } else if (loopEndId === id) {
+      Mark.syncLoopUI(this.mark, this.popup, this.loopSign, 'finish');
+    } else {
+      Mark.syncLoopUI(this.mark, this.popup, this.loopSign);
+    }
 
     // This wrapper is just to reset some inherited styles
     const $popupWrapper = createDomElement(`
@@ -596,7 +619,8 @@ class Mark {
   }
 
   static removeMark(bookmarkId) {
-    document.getElementById(this.createMarkWrapperDomId(bookmarkId))?.remove();
+    this.find(bookmarkId)?.remove();
+    this.findPopup(bookmarkId)?.parentElement.remove();
   }
 
   static isInPopup($el) {
@@ -636,18 +660,24 @@ class Mark {
     this.#setDomState();
   }
 
-  static syncMarkLoopUI($mark) {
-    const id = this.getBookmarkIdFromDom($mark);
-    const $loopMarks = this.findLoopMarks();
-    const $markContainer = document.getElementById(
-      this.createMarkWrapperDomId(id),
+  static syncMarkLoopUI($mark, loopPartType) {
+    const { mark, popup, loopSign } = this.getInstance(
+      this.getBookmarkIdFromDom($mark),
     );
-    const $popup = this.findPopup(id);
+    Mark.syncLoopUI(mark, popup, loopSign, loopPartType);
+  }
+
+  static syncLoopUI($mark, $popup, $loopSign, loopPartType) {
     const $loopButton = $popup.querySelector('[data-component="loop-btn"]');
     const $loopLabel = $popup.querySelector('[data-component="loop-label"]');
-    const $loopSign = $markContainer.querySelector(
-      '[data-component="loop-sign"]',
-    );
+
+    if (loopPartType === 'start' || loopPartType === 'finish') {
+      $mark.dataset.loop = loopPartType;
+    } else {
+      delete $mark.dataset.loop;
+    }
+
+    const $loopMarks = this.findLoopMarks();
 
     if ($mark.dataset.loop === 'start' || $mark.dataset.loop === 'finish') {
       if ($mark.dataset.loop === 'start') {
@@ -685,7 +715,7 @@ class Mark {
       ?.addEventListener('click', this.boundedHandlePopupClickAway, {
         capture: true,
       });
-    Mark.syncMarkLoopUI(this.mark);
+    Mark.syncMarkLoopUI(this.mark, this.mark.dataset.loop);
   }
 
   handleClosePopup(e) {
@@ -707,7 +737,7 @@ class Mark {
 
   handleDeleteBookmark(e) {
     this.mediator.notify(this, {
-      type: 'renderer/delete_bookmark',
+      type: 'api/delete_bookmark',
       payload: { bookmarkId: this.state.id },
     });
   }
@@ -715,7 +745,7 @@ class Mark {
   handleEditBookmark() {
     this.popup.close();
     this.mediator.notify(this, {
-      type: 'renderer/open_bookmark_edit_modal',
+      type: 'ui/open_bookmark_edit_modal',
       payload: { bookmark: this.state.bookmark },
     });
   }
@@ -724,8 +754,7 @@ class Mark {
     const action = e.currentTarget.dataset.action;
 
     if (action === 'start') {
-      this.mark.dataset.loop = 'start';
-      Mark.syncMarkLoopUI(this.mark);
+      Mark.syncMarkLoopUI(this.mark, 'start');
       return;
     }
 
@@ -733,7 +762,7 @@ class Mark {
 
     if (action === 'finish' && $loopMarks[0]) {
       this.mediator.notify(this, {
-        type: 'renderer/save_loop',
+        type: 'api/save_loop',
         payload: {
           loopStartId: Mark.getBookmarkIdFromDom($loopMarks[0]),
           loopEndId: this.state.id,
@@ -744,7 +773,7 @@ class Mark {
 
   handleLoopDelete() {
     this.mediator.notify(this, {
-      type: 'renderer/delete_loop',
+      type: 'api/delete_loop',
     });
   }
 
@@ -910,7 +939,7 @@ class BookmarkEditModal {
     if (this.mediator) {
       if (this.state.bookmark) {
         this.mediator.notify(this, {
-          type: 'renderer/update_bookmark',
+          type: 'api/update_bookmark',
           payload: { bookmark: { ...this.state.bookmark, title, color } },
         });
       } else {
@@ -994,41 +1023,37 @@ contentRenderer.render();
 chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
   switch (message.action) {
     case 'CONTENT/PLAY_VIDEO_AT': {
-      // TODO: what if there is loop presence?
-      const video = document.body.querySelector('video');
-
-      if (video) {
-        video.currentTime = message.time;
-        video.play();
-      }
+      await contentRenderer.notify(null, {
+        type: 'ui/play_video',
+        payload: { time: message.time },
+      });
       break;
     }
     case 'CONTENT/CREATE_BOOKMARK': {
       await contentRenderer.notify(null, {
-        type: 'renderer/render_bookmark',
+        type: 'ui/render_bookmark',
         payload: { bookmark: message.bookmark },
       });
       break;
     }
     case 'CONTENT/UPDATE_BOOKMARK': {
       await contentRenderer.notify(null, {
-        type: 'renderer/update_bookmark_ui',
+        type: 'ui/update_bookmark',
         payload: { bookmark: message.bookmark },
       });
-
       break;
     }
     case 'CONTENT/DELETE_BOOKMARK': {
       await contentRenderer.notify(null, {
-        type: 'renderer/clear_loop_ui_by_bookmarkId',
+        type: 'ui/delete_bookmark',
         payload: { bookmarkId: message.bookmarkId },
       });
-      Mark.removeMark(message.bookmarkId);
       break;
     }
     case 'CONTENT/DELETE_ALL_BOOKMARKS': {
-      ProgressBar.clearContent();
-      contentRenderer.removeDomLoop();
+      await contentRenderer.notify(null, {
+        type: 'ui/delete_all_bookmarks',
+      });
       break;
     }
     default:
