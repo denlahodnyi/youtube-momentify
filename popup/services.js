@@ -60,4 +60,8 @@ export default class Services {
       bookmarkId,
     });
   }
+
+  static async resetData() {
+    console.log('RESET');
+  }
 }

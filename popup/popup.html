@@ -81,10 +81,64 @@
         <form action="" id="search" class="search">
           <input type="search" aria-label="Search by video title" />
         </form>
+        <button
+          id="settings-link"
+          aria-label="Navigate to settings"
+          class="page__header-action"
+        >
+          <svg
+            aria-hidden
+            xmlns="http://www.w3.org/2000/svg"
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M14 17H5" />
+            <path d="M19 7h-9" />
+            <circle cx="17" cy="17" r="3" />
+            <circle cx="7" cy="7" r="3" />
+          </svg>
+        </button>
       </div>
       <div id="videos-list">
         <p>Total saved videos: <span id="videos-count">0</span></p>
       </div>
+    </template>
+
+    <template id="settings-template">
+      <div class="page__header">
+        <button
+          id="home-link"
+          aria-label="Navigate to home"
+          class="page__header-action"
+        >
+          <svg
+            aria-hidden
+            xmlns="http://www.w3.org/2000/svg"
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="m12 19-7-7 7-7" />
+            <path d="M19 12H5" />
+          </svg>
+        </button>
+      </div>
+      <section>
+        <h2>Clear all data</h2>
+        <p>This will delete all saved bookmarks</p>
+        <button id="data-reset-button">Clear</button>
+      </section>
     </template>
 
     <template id="video-template">

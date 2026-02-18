@@ -2,17 +2,19 @@ export default class HomePage {
   services;
   Bookmark;
   Video;
+  onNavigate;
   state = {
     videoId: null,
     $currentColorPickerInvoker: null,
     currentColorPickerBookmark: null,
   };
 
-  constructor({ videoId }, { Services, Bookmark, Video }) {
+  constructor({ videoId, handleNavToSettings }, { Services, Bookmark, Video }) {
     this.services = Services;
     this.Bookmark = Bookmark;
     this.Video = Video;
     this.state.videoId = videoId;
+    this.handleNavToSettings = handleNavToSettings;
     this.attachColorPickerListeners();
   }
 
@@ -25,6 +27,9 @@ export default class HomePage {
   renderPageLayout($container) {
     const $tmpl = document.getElementById('home-template');
     $container.append($tmpl.content.cloneNode(true));
+    document.getElementById('settings-link').addEventListener('click', () => {
+      this.onNavigate?.();
+    });
   }
 
   async renderVideos() {
