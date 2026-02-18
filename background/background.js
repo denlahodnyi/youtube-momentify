@@ -12,10 +12,24 @@ chrome.commands.onCommand.addListener(async (command) => {
     url: 'https://*.youtube.com/watch?v=*',
   });
 
-  if (command === 'quick-save' && activeVideoTab) {
-    chrome.tabs.sendMessage(activeVideoTab.id, {
-      action: 'CONTENT/QUICK_SAVE',
-    });
+  if (activeVideoTab) {
+    switch (command) {
+      case 'quick-save': {
+        chrome.tabs.sendMessage(activeVideoTab.id, {
+          action: 'CONTENT/QUICK_SAVE',
+        });
+        break;
+      }
+      case 'edited-save': {
+        chrome.tabs.sendMessage(activeVideoTab.id, {
+          action: 'CONTENT/EDITED_SAVE',
+        });
+        break;
+      }
+      default:
+        console.warn('Unknown command:', command);
+        break;
+    }
   }
 });
 

@@ -24,6 +24,12 @@
         "default": "Shift+Alt+Q"
       },
       "description": "Quick save"
+    },
+    "edited-save": {
+      "suggested_key": {
+        "default": "Shift+Alt+E"
+      },
+      "description": "Edit & save"
     }
   }
 }

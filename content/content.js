@@ -1062,6 +1062,12 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
         type: 'api/save_bookmark',
       });
     }
+    case 'CONTENT/EDITED_SAVE': {
+      await contentRenderer.notify(null, {
+        type: 'ui/open_bookmark_edit_modal',
+        payload: { isNewBookmark: true },
+      });
+    }
     case 'CONTENT/PLAY_VIDEO_AT': {
       await contentRenderer.notify(null, {
         type: 'ui/play_video',
