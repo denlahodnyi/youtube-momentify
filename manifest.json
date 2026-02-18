@@ -17,5 +17,13 @@
     "service_worker": "background/background.js",
     "type": "module"
   },
-  "permissions": ["activeTab", "tabs"]
+  "permissions": ["activeTab", "tabs"],
+  "commands": {
+    "quick-save": {
+      "suggested_key": {
+        "default": "Shift+Alt+Q"
+      },
+      "description": "Quick save"
+    }
+  }
 }

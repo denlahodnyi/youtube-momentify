@@ -1,12 +1,26 @@
-// TODO: sw must broadcast changes to all tabs
 const DEFAULT_MARK_COLOR = '#FF7F50';
 const BOOKMARKS_BY_VIDEO_ID_IDX = 'bookmarks_idx/by_videoId';
 const VIDEOS_BY_CREATED_AT_IDX = 'videos_idx/by_createdAt';
 const BOOKMARK_TITLE_CONSTRAINS = { min: 1, max: 80 };
 const BOOKMARK_NOTE_CONSTRAINS = { min: 0, max: 200 };
 
+chrome.commands.onCommand.addListener(async (command) => {
+  console.log(`Command: ${command}`);
+  const [activeVideoTab] = await chrome.tabs.query({
+    active: true,
+    currentWindow: true,
+    url: 'https://*.youtube.com/watch?v=*',
+  });
+
+  if (command === 'quick-save' && activeVideoTab) {
+    chrome.tabs.sendMessage(activeVideoTab.id, {
+      action: 'CONTENT/QUICK_SAVE',
+    });
+  }
+});
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  console.log('sw message', message, sender);
+  console.log('sw message', message, sender?.url);
 
   (async () => {
     try {

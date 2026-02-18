@@ -1057,6 +1057,11 @@ contentRenderer.render();
 
 chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
   switch (message.action) {
+    case 'CONTENT/QUICK_SAVE': {
+      await contentRenderer.notify(null, {
+        type: 'api/save_bookmark',
+      });
+    }
     case 'CONTENT/PLAY_VIDEO_AT': {
       await contentRenderer.notify(null, {
         type: 'ui/play_video',
