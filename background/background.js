@@ -108,7 +108,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           const { videoId } = await deleteBookmark(db, message.bookmarkId);
           const tabs = await getCurrentVideoTabs(videoId);
 
-          if (tabs) {
+          if (tabs.length) {
             for (const tab of tabs) {
               chrome.tabs.sendMessage(tab.id, {
                 action: 'CONTENT/DELETE_BOOKMARK',
@@ -124,7 +124,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           await deleteBookmarksByVideoId(db, message.videoId);
           const tabs = await getCurrentVideoTabs(message.videoId);
 
-          if (tabs) {
+          if (tabs.length) {
             for (const tab of tabs) {
               chrome.tabs.sendMessage(tab.id, {
                 action: 'CONTENT/DELETE_ALL_BOOKMARKS',
@@ -139,6 +139,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           const { videoId } = message;
           await deleteVideo(db, videoId);
           const tabs = await getCurrentVideoTabs(videoId);
+
+          if (tabs.length) {
+            for (const tab of tabs) {
+              chrome.tabs.sendMessage(tab.id, {
+                action: 'CONTENT/DELETE_ALL_BOOKMARKS',
+              });
+            }
+          }
+
+          sendResponse({ success: true });
+          break;
+        }
+        case 'RESET': {
+          const videoIds = await resetData(db);
+          const tabs = await getCurrentVideoTabs(...videoIds);
 
           if (tabs.length) {
             for (const tab of tabs) {
@@ -609,10 +624,37 @@ function deleteVideo(db, videoId) {
   });
 }
 
-async function getCurrentVideoTabs(videoId) {
-  const tabs = await chrome.tabs.query({
-    url: `https://*.youtube.com/watch?v=${videoId}*`,
-  });
+function resetData(db) {
+  return new Promise((resolve, reject) => {
+    const t = db.transaction(['videos', 'bookmarks'], 'readwrite');
+    const videoIds = [];
 
+    t.oncomplete = () => {
+      resolve(videoIds);
+    };
+
+    t.onabort = () => {
+      reject(t.error);
+    };
+
+    t.objectStore('videos').getAllKeys().onsuccess = (e) => {
+      videoIds.push(...e.target.result);
+      t.objectStore('videos').clear();
+      t.objectStore('bookmarks').clear();
+    };
+  });
+}
+
+function getYoutubeVideoTabPattern(videoId) {
+  return `https://*.youtube.com/watch?v=${videoId}*`;
+}
+
+export async function getCurrentVideoTabs(videoId, ...ids) {
+  const tabs = await chrome.tabs.query({
+    url: [
+      getYoutubeVideoTabPattern(videoId),
+      ...(ids.length ? ids.map(getYoutubeVideoTabPattern) : []),
+    ],
+  });
   return tabs;
 }

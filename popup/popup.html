@@ -137,7 +137,27 @@
       <section>
         <h2>Clear all data</h2>
         <p>This will delete all saved bookmarks</p>
-        <button id="data-reset-button">Clear</button>
+        <button
+          id="data-reset-button"
+          command="show-modal"
+          commandfor="reset-alert"
+          aria-haspopup="dialog"
+        >
+          Clear
+        </button>
+        <dialog id="reset-alert" aria-describedby="reset-alert-title">
+          <h2 id="reset-alert-title">
+            This action is irreversible. Are you sure?
+          </h2>
+          <button
+            id="reset-alert-confirm-button"
+            command="close"
+            commandfor="reset-alert"
+          >
+            Reset
+          </button>
+          <button command="close" commandfor="reset-alert">Cancel</button>
+        </dialog>
       </section>
     </template>
 

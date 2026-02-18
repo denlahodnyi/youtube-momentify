@@ -62,6 +62,8 @@ export default class Services {
   }
 
   static async resetData() {
-    console.log('RESET');
+    return chrome.runtime.sendMessage({
+      action: 'RESET',
+    });
   }
 }

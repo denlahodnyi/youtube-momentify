@@ -48,15 +48,18 @@ export async function getCurrentVideoActiveTab(videoId) {
   }
 }
 
-export async function getCurrentVideoTabs(videoId) {
-  const tabs = await chrome.tabs.query({
-    url: `https://*.youtube.com/watch?v=${videoId}*`,
-  });
+function getYoutubeVideoTabPattern(videoId) {
+  return `https://*.youtube.com/watch?v=${videoId}*`;
+}
 
-  // TODO: always return array
-  if (tabs && tabs.length > 0) {
-    return tabs;
-  }
+export async function getCurrentVideoTabs(videoId, ...ids) {
+  const tabs = await chrome.tabs.query({
+    url: [
+      getYoutubeVideoTabPattern(videoId),
+      ...(ids.length ? ids.map(getYoutubeVideoTabPattern) : []),
+    ],
+  });
+  return tabs;
 }
 
 export async function getVideoId() {

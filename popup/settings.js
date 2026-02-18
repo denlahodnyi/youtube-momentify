@@ -17,11 +17,9 @@ export default class SettingsPage {
       this.onNavigate?.();
     });
     document
-      .getElementById('data-reset-button')
+      .getElementById('reset-alert-confirm-button')
       .addEventListener('click', () => {
-        // const confirmed = confirm(
-        //   'This decision is irreversible. Are you sure?',
-        // );
+        this.services.resetData();
       });
   }
 }

@@ -121,7 +121,7 @@ export default class Bookmark {
 
     const tabs = await getCurrentVideoTabs(this.bookmark.videoId);
 
-    if (tabs) {
+    if (tabs.length) {
       const [tab] = tabs;
       this.services.playVideo(tab.id, this.bookmark.time);
       await chrome.tabs.update(tab.id, { active: true });
