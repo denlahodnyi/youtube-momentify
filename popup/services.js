@@ -66,4 +66,17 @@ export default class Services {
       action: 'RESET',
     });
   }
+
+  static async exportData() {
+    return chrome.runtime.sendMessage({
+      action: 'EXPORT_DATA',
+    });
+  }
+
+  static async importData(data) {
+    return chrome.runtime.sendMessage({
+      action: 'IMPORT_DATA',
+      data,
+    });
+  }
 }

@@ -1,8 +1,18 @@
+import {
+  getCurrentVideoTabs,
+  getYoutubeVideoTabPattern,
+  validateHex,
+  validateImportedData,
+  ValidationError,
+} from './backgroundUtils.js';
+
 const DEFAULT_MARK_COLOR = '#FF7F50';
 const BOOKMARKS_BY_VIDEO_ID_IDX = 'bookmarks_idx/by_videoId';
 const VIDEOS_BY_CREATED_AT_IDX = 'videos_idx/by_createdAt';
+const VIDEO_TITLE_CONSTRAINS = { min: 1, max: 100 };
 const BOOKMARK_TITLE_CONSTRAINS = { min: 1, max: 80 };
 const BOOKMARK_NOTE_CONSTRAINS = { min: 0, max: 200 };
+const DATA_VERSION = 1;
 
 chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === chrome.runtime.OnInstalledReason.INSTALL) {
@@ -92,8 +102,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           if (!error && tabs.length) {
             for (const tab of tabs) {
               chrome.tabs.sendMessage(tab.id, {
-                action: 'CONTENT/CREATE_BOOKMARK',
-                bookmark,
+                action: 'CONTENT/CREATE_BOOKMARKS',
+                bookmarks: [bookmark],
               });
             }
           }
@@ -238,11 +248,57 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           sendResponse({ success: true });
           break;
         }
+        case 'EXPORT_DATA': {
+          const videosWithBookmarks = await getBookmarks(db);
+
+          for (const video of videosWithBookmarks) {
+            delete video.loopStartId;
+            delete video.loopEndId;
+          }
+
+          sendResponse({
+            success: true,
+            data: {
+              version: DATA_VERSION,
+              exportedAt: new Date().toISOString(),
+              videos: videosWithBookmarks,
+            },
+          });
+          break;
+        }
+        case 'IMPORT_DATA': {
+          try {
+            validateImportedData(message.data, DATA_VERSION, {
+              videoTitle: VIDEO_TITLE_CONSTRAINS,
+              bookmarkTitle: BOOKMARK_TITLE_CONSTRAINS,
+              bookmarkNote: BOOKMARK_NOTE_CONSTRAINS,
+            });
+            await importData(db, message.data);
+            const videoIds = message.data.videos.map((v) => v.videoId);
+            const tabs = await getCurrentVideoTabs(...videoIds);
+
+            if (tabs.length) {
+              for (const tab of tabs) {
+                chrome.tabs.sendMessage(tab.id, {
+                  action: 'CONTENT/REFRESH_BOOKMARKS',
+                });
+              }
+            }
+
+            sendResponse({ success: true });
+          } catch (error) {
+            const errorMessage =
+              error instanceof ValidationError
+                ? error.message
+                : 'Failed to import data';
+            sendResponse({ success: false, error: errorMessage });
+          }
+        }
         default:
           console.warn('Unknown action:', message.action);
       }
     } catch (err) {
-      console.error('Messages listener error', err);
+      console.error('Messages listener error', err?.message);
     }
   })();
 
@@ -280,7 +336,7 @@ function openDatabase() {
       if (!db.objectStoreNames.contains('bookmarks')) {
         const bmObjectStore = db.createObjectStore('bookmarks', {
           keyPath: 'id',
-          autoIncrement: true,
+          autoIncrement: false,
         });
         bmObjectStore.createIndex(BOOKMARKS_BY_VIDEO_ID_IDX, 'videoId', {
           unique: false,
@@ -303,7 +359,7 @@ function openDatabase() {
       const db = dbOpenRequest.result;
 
       db.onerror = (e) => {
-        console.error('Database error: ', e.target.error);
+        console.error('Database error: ', e.target.error?.message);
       };
 
       db.onversionchange = () => {
@@ -359,7 +415,12 @@ function createBookmark(db, payload) {
       });
     }
 
+    if (payload.color && !validateHex(payload.color)) {
+      resolve({ error: 'Bookmark color must be a valid hex code' });
+    }
+
     t.objectStore('bookmarks').add({
+      id: crypto.randomUUID(),
       videoId: payload.videoId,
       time: payload.time,
       title: payload.title ?? new Date().toLocaleString(),
@@ -409,11 +470,12 @@ function getBookmarks(db, topVideoId = null) {
         const video = cursor.value;
         bmStore.index(BOOKMARKS_BY_VIDEO_ID_IDX).getAll({
           query: IDBKeyRange.only(video.videoId),
-          direction: 'prev', // show newest first
         }).onsuccess = (ev) => {
           videosWithBookmarks.set(video.videoId, {
             ...video,
-            bookmarks: ev.target.result,
+            bookmarks: ev.target.result.toSorted(
+              (a, b) => b.createdAt - a.createdAt,
+            ), // sort bookmarks by createdAt desc
           });
           cursor.continue();
         };
@@ -526,9 +588,8 @@ function updateBookmark(db, bookmark) {
         error: `Bookmark note must be less than ${BOOKMARK_NOTE_CONSTRAINS.max} characters`,
       });
     }
-    if (!bookmark.color) {
-      // TODO: validate hex?
-      resolve({ error: 'Bookmark color must present' });
+    if (!bookmark.color || !validateHex(bookmark.color)) {
+      resolve({ error: 'Bookmark color must be a valid hex code' });
     }
 
     const req = bmStore.put(bookmark);
@@ -717,16 +778,43 @@ function resetData(db) {
   });
 }
 
-function getYoutubeVideoTabPattern(videoId) {
-  return `https://*.youtube.com/watch?v=${videoId}*`;
-}
+function importData(db, data) {
+  return new Promise((resolve, reject) => {
+    const t = db.transaction(['videos', 'bookmarks'], 'readwrite');
 
-export async function getCurrentVideoTabs(videoId, ...ids) {
-  const tabs = await chrome.tabs.query({
-    url: [
-      getYoutubeVideoTabPattern(videoId),
-      ...(ids.length ? ids.map(getYoutubeVideoTabPattern) : []),
-    ],
+    t.oncomplete = () => {
+      resolve();
+    };
+
+    t.onabort = () => {
+      reject(t.error);
+    };
+
+    const videoStore = t.objectStore('videos');
+    const bmStore = t.objectStore('bookmarks');
+
+    for (const video of data.videos) {
+      videoStore.put({
+        videoId: video.videoId,
+        title: video.title,
+        createdAt: video.createdAt,
+        loopStartId: null,
+        loopEndId: null,
+      }).onsuccess = (e) => {
+        const videoId = e.target.result;
+
+        for (const bookmark of video.bookmarks) {
+          bmStore.put({
+            id: bookmark.id,
+            videoId,
+            time: bookmark.time,
+            title: bookmark.title,
+            note: bookmark.note,
+            color: bookmark.color,
+            createdAt: bookmark.createdAt,
+          });
+        }
+      };
+    }
   });
-  return tabs;
 }

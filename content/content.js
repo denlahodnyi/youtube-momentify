@@ -121,13 +121,16 @@ class ContentRenderer {
 
         break;
       }
-      case 'ui/render_bookmark': {
+      case 'ui/render_bookmarks': {
         const $video = document.body.querySelector('video');
 
         if ($video) {
-          const { bookmark } = event.payload;
-          const mark = this.buildBookmark(bookmark, $video.duration);
-          ProgressBar.pushBookmark(mark.dom);
+          const { bookmarks } = event.payload;
+
+          for (const bookmark of bookmarks) {
+            const mark = this.buildBookmark(bookmark, $video.duration);
+            if (mark) ProgressBar.pushBookmark(mark.dom);
+          }
         } else {
           console.error('[momentify] No video element found');
         }
@@ -163,6 +166,10 @@ class ContentRenderer {
 
         if (markInstance) markInstance.syncState({ bookmark });
 
+        break;
+      }
+      case 'ui/refresh_bookmarks': {
+        this.renderProgressBar();
         break;
       }
       case 'ui/open_bookmark_edit_modal': {
@@ -380,7 +387,7 @@ class ContentRenderer {
                 loopStartId,
                 loopEndId,
               );
-              $marksContainer.append(mark.dom);
+              if (mark) $marksContainer.append(mark.dom);
             });
 
             if (loopStartId && loopEndId) {
@@ -437,6 +444,7 @@ class ContentRenderer {
   }
 
   buildBookmark(bookmark, duration, loopStartId, loopEndId) {
+    if (bookmark.time > duration) return null;
     const mark = new this.Mark(
       {
         bookmark,
@@ -539,7 +547,7 @@ class ProgressBar {
 
   static clearContent() {
     const $container = this.findMarksContainer();
-    if ($container) $container.innerHTML = '';
+    if ($container) $container.replaceChildren();
   }
 
   static pushBookmark($bookmark) {
@@ -728,7 +736,7 @@ class Mark {
   }
 
   static getBookmarkIdFromDom($mark) {
-    return Number($mark.id.split('momentify-bookmark-')[1]);
+    return $mark.id.split('momentify-bookmark-')[1];
   }
 
   static removeMark(bookmarkId) {
@@ -1183,10 +1191,16 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       });
       break;
     }
-    case 'CONTENT/CREATE_BOOKMARK': {
+    case 'CONTENT/CREATE_BOOKMARKS': {
       await contentRenderer.notify(null, {
-        type: 'ui/render_bookmark',
-        payload: { bookmark: message.bookmark },
+        type: 'ui/render_bookmarks',
+        payload: { bookmarks: message.bookmarks },
+      });
+      break;
+    }
+    case 'CONTENT/REFRESH_BOOKMARKS': {
+      await contentRenderer.notify(null, {
+        type: 'ui/refresh_bookmarks',
       });
       break;
     }

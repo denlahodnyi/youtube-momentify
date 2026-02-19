@@ -9,6 +9,7 @@ export default class SettingsPage {
   render($container) {
     this.renderPageLayout($container);
     this.renderContentSettings();
+    this.renderImportExport();
     this.renderShortcutsSection();
     this.renderResetDataSection();
   }
@@ -102,6 +103,49 @@ export default class SettingsPage {
         }
       }
     }
+  }
+
+  renderImportExport() {
+    const $exportButton = document.getElementById('export-action');
+    $exportButton?.addEventListener('click', async () => {
+      const $link = document.createElement('a');
+      const { success, data } = await this.services.exportData();
+
+      if (success) {
+        const blob = new Blob([JSON.stringify(data, null, 2)], {
+          type: 'application/json',
+        });
+        $link.href = URL.createObjectURL(blob);
+        $link.download = `momentify-bookmarks_${new Date().toLocaleString()}.json`;
+        $link.click();
+        URL.revokeObjectURL($link.href);
+        $link.remove();
+      }
+    });
+
+    const $importInput = document.getElementById('import-action');
+    $importInput?.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+          try {
+            const data = JSON.parse(event.target.result);
+            const result = await this.services.importData(data);
+            const $alert = document.getElementById('import-alert');
+
+            if (result.success) {
+              $alert.textContent = 'Data imported successfully!';
+            } else {
+              $alert.textContent = result.error;
+            }
+          } catch (err) {
+            console.error('Failed to import data:', err);
+          }
+        };
+        reader.readAsText(file);
+      }
+    });
   }
 
   renderResetDataSection() {
