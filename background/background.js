@@ -4,8 +4,40 @@ const VIDEOS_BY_CREATED_AT_IDX = 'videos_idx/by_createdAt';
 const BOOKMARK_TITLE_CONSTRAINS = { min: 1, max: 80 };
 const BOOKMARK_NOTE_CONSTRAINS = { min: 0, max: 200 };
 
+chrome.runtime.onInstalled.addListener((details) => {
+  if (details.reason === chrome.runtime.OnInstalledReason.INSTALL) {
+    chrome.storage.local.set({
+      showQuickSave: true,
+      showEditedSave: true,
+    });
+  }
+});
+
+chrome.storage.onChanged.addListener(async (changes, area) => {
+  if (area === 'local' && changes) {
+    const { showQuickSave, showEditedSave } = changes;
+    const tabs = await chrome.tabs.query({
+      url: getYoutubeVideoTabPattern(''),
+    });
+
+    for (const tab of tabs) {
+      if (showQuickSave) {
+        chrome.tabs.sendMessage(tab.id, {
+          action: 'CONTENT/TOGGLE_QUICK_SAVE',
+          show: showQuickSave.newValue,
+        });
+      }
+      if (showEditedSave) {
+        chrome.tabs.sendMessage(tab.id, {
+          action: 'CONTENT/TOGGLE_EDITED_SAVE',
+          show: showEditedSave.newValue,
+        });
+      }
+    }
+  }
+});
+
 chrome.commands.onCommand.addListener(async (command) => {
-  console.log(`Command: ${command}`);
   const [activeVideoTab] = await chrome.tabs.query({
     active: true,
     currentWindow: true,

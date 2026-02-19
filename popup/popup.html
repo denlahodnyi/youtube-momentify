@@ -135,6 +135,45 @@
         </button>
       </div>
       <section>
+        <h2>UI settings</h2>
+        <form id="content-settings-form">
+          <div>
+            <label for="quick-save-switch">Show "Quick save" button</label>
+            <button
+              id="quick-save-switch"
+              type="button"
+              role="switch"
+              aria-checked="false"
+              class="switch"
+            ></button>
+            <input
+              id="quick-save-input"
+              type="checkbox"
+              name="quick-save"
+              hidden
+              tabindex="-1"
+            />
+          </div>
+          <div>
+            <label for="edited-save-switch">Show "Edit & save" button</label>
+            <button
+              id="edited-save-switch"
+              type="button"
+              role="switch"
+              aria-checked="false"
+              class="switch"
+            ></button>
+            <input
+              id="edited-save-input"
+              type="checkbox"
+              name="edited-save"
+              hidden
+              tabindex="-1"
+            />
+          </div>
+        </form>
+      </section>
+      <section>
         <div>
           <h2>Shortcuts</h2>
           <a id="shortcuts-link" href="#">Edit</a>

@@ -17,7 +17,7 @@
     "service_worker": "background/background.js",
     "type": "module"
   },
-  "permissions": ["activeTab", "tabs"],
+  "permissions": ["activeTab", "tabs", "storage"],
   "commands": {
     "quick-save": {
       "suggested_key": {

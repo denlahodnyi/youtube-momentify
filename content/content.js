@@ -44,6 +44,16 @@ class ContentRenderer {
 
   async notify(sender, event) {
     switch (event.type) {
+      case 'ui/toggle_quick_save': {
+        const $button = BookmarkButton.find(true);
+        if ($button) $button.hidden = !event.payload.show;
+        break;
+      }
+      case 'ui/toggle_edited_save': {
+        const $button = BookmarkButton.find();
+        if ($button) $button.hidden = !event.payload.show;
+        break;
+      }
       case 'ui/play_video': {
         const video = document.body.querySelector('video');
 
@@ -292,12 +302,18 @@ class ContentRenderer {
     }
   }
 
-  renderBookmarkButton() {
-    if (this.state.videoId && !BookmarkButton.find()) {
+  async renderBookmarkButton() {
+    if (this.state.videoId && !BookmarkButton.find(true)) {
+      const settings = await chrome.storage.local.get([
+        'showQuickSave',
+        'showEditedSave',
+      ]);
       const quickSaveButton = new this.BookmarkButton();
       const saveWithEditButton = new this.BookmarkButton(true);
       quickSaveButton.setMediator(this);
       saveWithEditButton.setMediator(this);
+      quickSaveButton.dom.hidden = !settings.showQuickSave;
+      saveWithEditButton.dom.hidden = !settings.showEditedSave;
       const $controlsContainer = document.body.querySelector(
         '#movie_player .ytp-right-controls',
       );
@@ -1121,6 +1137,20 @@ contentRenderer.render();
 
 chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
   switch (message.action) {
+    case 'CONTENT/TOGGLE_QUICK_SAVE': {
+      await contentRenderer.notify(null, {
+        type: 'ui/toggle_quick_save',
+        payload: { show: message.show },
+      });
+      break;
+    }
+    case 'CONTENT/TOGGLE_EDITED_SAVE': {
+      await contentRenderer.notify(null, {
+        type: 'ui/toggle_edited_save',
+        payload: { show: message.show },
+      });
+      break;
+    }
     case 'CONTENT/QUICK_SAVE': {
       await contentRenderer.notify(null, {
         type: 'api/save_bookmark',
