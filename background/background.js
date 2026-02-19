@@ -26,6 +26,18 @@ chrome.commands.onCommand.addListener(async (command) => {
         });
         break;
       }
+      case 'next-bookmark': {
+        chrome.tabs.sendMessage(activeVideoTab.id, {
+          action: 'CONTENT/NEXT_BOOKMARK',
+        });
+        break;
+      }
+      case 'previous-bookmark': {
+        chrome.tabs.sendMessage(activeVideoTab.id, {
+          action: 'CONTENT/PREVIOUS_BOOKMARK',
+        });
+        break;
+      }
       default:
         console.warn('Unknown command:', command);
         break;

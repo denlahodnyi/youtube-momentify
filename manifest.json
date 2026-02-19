@@ -30,6 +30,18 @@
         "default": "Shift+Alt+E"
       },
       "description": "Edit & save"
+    },
+    "next-bookmark": {
+      "suggested_key": {
+        "default": "Shift+Alt+Right"
+      },
+      "description": "Go to next bookmark"
+    },
+    "previous-bookmark": {
+      "suggested_key": {
+        "default": "Shift+Alt+Left"
+      },
+      "description": "Go to previous bookmark"
     }
   }
 }

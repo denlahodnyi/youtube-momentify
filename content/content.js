@@ -55,6 +55,62 @@ class ContentRenderer {
 
         break;
       }
+      case 'ui/to_next_bookmark': {
+        const $video = document.querySelector('video');
+
+        if ($video) {
+          const timestamps = Array.from(Mark.findAllBookmarks()).map(($b) =>
+            Number($b.dataset.time),
+          );
+          let next = timestamps[0];
+
+          for (let a = 0, b = timestamps.length - 1; a <= b; a++, b--) {
+            if (timestamps[a] > $video.currentTime) {
+              next = timestamps[a];
+              break;
+            }
+            if (timestamps[b] <= $video.currentTime) {
+              next = timestamps[b === timestamps.length - 1 ? 0 : b + 1];
+              break;
+            }
+          }
+
+          if (next) {
+            $video.pause();
+            $video.currentTime = next;
+          }
+        }
+
+        break;
+      }
+      case 'ui/to_prev_bookmark': {
+        const $video = document.querySelector('video');
+
+        if ($video) {
+          const timestamps = Array.from(Mark.findAllBookmarks()).map(($b) =>
+            Number($b.dataset.time),
+          );
+          let next = timestamps.at(-1);
+
+          for (let a = 0, b = timestamps.length - 1; a <= b; a++, b--) {
+            if (timestamps[a] >= $video.currentTime) {
+              next = timestamps.at(a === 0 ? -1 : a - 1);
+              break;
+            }
+            if (timestamps[b] < $video.currentTime) {
+              next = timestamps[b];
+              break;
+            }
+          }
+
+          if (next) {
+            $video.pause();
+            $video.currentTime = next;
+          }
+        }
+
+        break;
+      }
       case 'ui/render_bookmark': {
         const $video = document.body.querySelector('video');
 
@@ -620,6 +676,10 @@ class Mark {
     return document.getElementById(this.createMarkDomId(bookmarkId));
   }
 
+  static findAllBookmarks() {
+    return document.querySelectorAll('[data-component="mark"]');
+  }
+
   static findPopup(bookmarkId) {
     return document.getElementById(this.createPopupDomId(bookmarkId));
   }
@@ -1061,12 +1121,26 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       await contentRenderer.notify(null, {
         type: 'api/save_bookmark',
       });
+      break;
     }
     case 'CONTENT/EDITED_SAVE': {
       await contentRenderer.notify(null, {
         type: 'ui/open_bookmark_edit_modal',
         payload: { isNewBookmark: true },
       });
+      break;
+    }
+    case 'CONTENT/NEXT_BOOKMARK': {
+      await contentRenderer.notify(null, {
+        type: 'ui/to_next_bookmark',
+      });
+      break;
+    }
+    case 'CONTENT/PREVIOUS_BOOKMARK': {
+      await contentRenderer.notify(null, {
+        type: 'ui/to_prev_bookmark',
+      });
+      break;
     }
     case 'CONTENT/PLAY_VIDEO_AT': {
       await contentRenderer.notify(null, {
