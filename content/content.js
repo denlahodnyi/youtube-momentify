@@ -457,7 +457,7 @@ class BookmarkButton {
 
   constructor(isQuick = false) {
     this.isQuick = isQuick;
-    this.id = isQuick ? QUICK_SAVE_BTN_ID : SAVE_WITH_EDIT_BTN_ID;
+    this.id = BookmarkButton.createDomId(isQuick);
     const color = isQuick ? 'red' : 'blue';
     const label = isQuick ? 'Save quick bookmark' : 'Edit and save bookmark';
     const $button = createDomElement(`
@@ -484,8 +484,12 @@ class BookmarkButton {
     }
   }
 
-  static find() {
-    return document.getElementById(this.id);
+  static find(isQuick = false) {
+    return document.getElementById(this.createDomId(isQuick));
+  }
+
+  static createDomId(isQuick = false) {
+    return isQuick ? QUICK_SAVE_BTN_ID : SAVE_WITH_EDIT_BTN_ID;
   }
 }
 
