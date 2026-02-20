@@ -208,27 +208,35 @@ class ContentRenderer {
       }
       case 'api/save_loop': {
         const { loopStartId, loopEndId } = event.payload;
-        const result = await this.services.saveLoop({
+        await this.services.saveLoop({
           videoId: this.state.videoId,
           loopStartId,
           loopEndId,
         });
-
-        if (result.success) {
-          Array.from(
-            this.Mark.findAllLoopMarks(this.ProgressBar.findMarksContainer()),
+        break;
+      }
+      case 'ui/set_video_loop': {
+        const { loopStartId, loopEndId } = event.payload;
+        Array.from(
+          this.Mark.findAllLoopMarks(this.ProgressBar.findMarksContainer()),
+        )
+          .filter(
+            ($m) =>
+              this.Mark.getBookmarkIdFromDom($m) !== loopStartId &&
+              this.Mark.getBookmarkIdFromDom($m) !== loopEndId,
           )
-            .filter(
-              ($m) =>
-                this.Mark.getBookmarkIdFromDom($m) !== loopStartId &&
-                this.Mark.getBookmarkIdFromDom($m) !== loopEndId,
-            )
-            .forEach(($m) => {
-              this.Mark.syncMarkLoopUI($m);
-            });
-          this.Mark.syncMarkLoopUI(sender.mark, 'finish');
+          .forEach(($m) => {
+            this.Mark.syncMarkLoopUI($m);
+          });
+        const $startMark = this.Mark.findMark(loopStartId);
+        const $endMark = this.Mark.findMark(loopEndId);
+
+        if ($startMark && $endMark) {
+          this.Mark.syncMarkLoopUI($startMark, 'start');
+          this.Mark.syncMarkLoopUI($endMark, 'finish');
           this.setupVideoLoop(loopStartId, loopEndId);
         }
+
         break;
       }
       case 'api/delete_loop': {
@@ -237,16 +245,16 @@ class ContentRenderer {
         );
 
         if ($loopMarks[0] && $loopMarks[1]) {
-          const result = await this.services.deleteLoop({
+          await this.services.deleteLoop({
             videoId: this.state.videoId,
           });
-
-          if (result.success) {
-            this.notify(null, { type: 'ui/clear_loop_ui' });
-          }
         } else {
           this.Mark.syncMarkLoopUI(sender.mark);
         }
+        break;
+      }
+      case 'ui/remove_video_loop': {
+        this.notify(null, { type: 'ui/clear_loop_ui' });
         break;
       }
       case 'ui/clear_loop_ui': {
@@ -1145,6 +1153,22 @@ contentRenderer.render();
 
 chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
   switch (message.action) {
+    case 'CONTENT/SET_VIDEO_LOOP': {
+      await contentRenderer.notify(null, {
+        type: 'ui/set_video_loop',
+        payload: {
+          loopStartId: message.loopStartId,
+          loopEndId: message.loopEndId,
+        },
+      });
+      break;
+    }
+    case 'CONTENT/REMOVE_VIDEO_LOOP': {
+      await contentRenderer.notify(null, {
+        type: 'ui/remove_video_loop',
+      });
+      break;
+    }
     case 'CONTENT/TOGGLE_QUICK_SAVE': {
       await contentRenderer.notify(null, {
         type: 'ui/toggle_quick_save',

@@ -178,11 +178,29 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             message.loopStartId,
             message.loopEndId,
           );
+          const tabs = await getCurrentVideoTabs(message.videoId);
+
+          for (const tab of tabs) {
+            chrome.tabs.sendMessage(tab.id, {
+              action: 'CONTENT/SET_VIDEO_LOOP',
+              loopStartId: message.loopStartId,
+              loopEndId: message.loopEndId,
+            });
+          }
+
           sendResponse({ success: true });
           break;
         }
         case 'DELETE_VIDEO_LOOP': {
           await deleteVideoLoop(db, message.videoId);
+          const tabs = await getCurrentVideoTabs(message.videoId);
+
+          for (const tab of tabs) {
+            chrome.tabs.sendMessage(tab.id, {
+              action: 'CONTENT/REMOVE_VIDEO_LOOP',
+            });
+          }
+
           sendResponse({ success: true });
           break;
         }
