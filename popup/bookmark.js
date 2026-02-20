@@ -8,11 +8,14 @@ import {
 export default class Bookmark {
   dom;
   services;
+  getBookmark;
   onColorPickerInvoke;
   onBookmarkDelete;
+  onBookmarkUpdate;
 
-  constructor({ bookmark, services }) {
-    this.bookmark = bookmark;
+  constructor({ getBookmark, services }) {
+    this.getBookmark = getBookmark;
+    const bookmark = getBookmark();
     this.services = services;
     const $tmpl = document.getElementById('bookmark-template');
 
@@ -39,16 +42,20 @@ export default class Bookmark {
         $titleCharsCount.textContent = e.target.value.length;
       });
       $titleInput.addEventListener('change', async (e) => {
+        const bookmark = this.getBookmark();
         e.target.value = e.target.value.trim();
         const isValid = e.target.checkValidity();
 
         if (isValid) {
-          const result = await this.services.updateBookmark({
+          const updatedBookmark = {
             ...bookmark,
             title: e.target.value,
-          });
+          };
+          const result = await this.services.updateBookmark(updatedBookmark);
 
-          // if (result.success) bookmark.title = e.target.value;
+          if (result.success) {
+            onBookmarkUpdate?.(updatedBookmark);
+          }
         } else {
           const { valueMissing, tooShort } = e.target.validity;
 
@@ -71,12 +78,16 @@ export default class Bookmark {
         $noteCharsCount.textContent = e.target.value.length;
       });
       $noteInput.addEventListener('change', async (e) => {
-        const result = await this.services.updateBookmark({
+        const bookmark = this.getBookmark();
+        const updatedBookmark = {
           ...bookmark,
           note: e.target.value,
-        });
+        };
+        const result = await this.services.updateBookmark(updatedBookmark);
 
-        // if (result.success) bookmark.note = e.target.value;
+        if (result.success) {
+          onBookmarkUpdate?.(updatedBookmark);
+        }
       });
 
       // Color picker
@@ -88,7 +99,7 @@ export default class Bookmark {
         const $colorPickerPopover = document.getElementById(
           'bookmark-color-picker',
         );
-        this.onColorPickerInvoke?.($colorButton, bookmark);
+        this.onColorPickerInvoke?.($colorButton, bookmark.id);
         $colorPickerPopover.togglePopover({ source: $colorButton });
       });
 
@@ -112,18 +123,19 @@ export default class Bookmark {
   }
 
   async handlePlay() {
-    const activeTab = await getCurrentVideoActiveTab(this.bookmark.videoId);
+    const bookmark = this.getBookmark();
+    const activeTab = await getCurrentVideoActiveTab(bookmark.videoId);
 
     if (activeTab) {
-      this.services.playVideo(activeTab.id, this.bookmark.time);
+      this.services.playVideo(activeTab.id, bookmark.time);
       return;
     }
 
-    const tabs = await getCurrentVideoTabs(this.bookmark.videoId);
+    const tabs = await getCurrentVideoTabs(bookmark.videoId);
 
     if (tabs.length) {
       const [tab] = tabs;
-      this.services.playVideo(tab.id, this.bookmark.time);
+      this.services.playVideo(tab.id, bookmark.time);
       await chrome.tabs.update(tab.id, { active: true });
       await chrome.windows.update(tab.windowId, { focused: true });
       return;
@@ -131,14 +143,15 @@ export default class Bookmark {
 
     // TODO: check this later
     await chrome.tabs.create({
-      url: getVideoUrlWithTime(this.bookmark.videoId, this.bookmark.time),
+      url: getVideoUrlWithTime(bookmark.videoId, bookmark.time),
       active: true,
     });
   }
 
   async handleDeleteBookmark() {
+    const bookmark = this.getBookmark();
     // TODO: show some loader?
-    const result = await this.services.deleteBookmark(this.bookmark.id);
+    const result = await this.services.deleteBookmark(bookmark.id);
 
     if (result.success) {
       this.onBookmarkDelete?.();
@@ -146,9 +159,10 @@ export default class Bookmark {
   }
 
   async handleCopyLink() {
+    const bookmark = this.getBookmark();
     try {
       await navigator.clipboard.writeText(
-        getVideoUrlWithTime(this.bookmark.videoId, this.bookmark.time),
+        getVideoUrlWithTime(bookmark.videoId, bookmark.time),
       );
     } catch (error) {
       console.error(error);

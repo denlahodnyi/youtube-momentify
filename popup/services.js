@@ -3,6 +3,8 @@ export default class Services {
     return chrome.runtime.sendMessage({
       action: 'GET_VIDEOS_WITH_BOOKMARKS',
       topmostVideoId,
+      includeBookmarks: false,
+      normalized: true,
     });
   }
 
@@ -16,6 +18,15 @@ export default class Services {
     return chrome.runtime.sendMessage({
       action: 'GET_BOOKMARKS_COUNT_BY_VIDEO_ID',
       videoId,
+    });
+  }
+
+  static async getVideoBookmarks(videoId, order = 'new') {
+    return chrome.runtime.sendMessage({
+      action: 'GET_BOOKMARKS_BY_VIDEO_ID',
+      videoId,
+      normalized: true,
+      order,
     });
   }
 

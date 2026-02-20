@@ -112,15 +112,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           break;
         }
         case 'GET_VIDEOS_WITH_BOOKMARKS': {
-          const videosWithBookmarks = await getBookmarks(
-            db,
-            message.topmostVideoId,
-          );
+          const videosWithBookmarks = await getVideosWithBookmarks(db, {
+            topVideoId: message?.topmostVideoId,
+            includeBookmarks: message?.includeBookmarks,
+            normalized: message?.normalized,
+          });
           sendResponse({ success: true, list: videosWithBookmarks });
           break;
         }
         case 'GET_BOOKMARKS_BY_VIDEO_ID': {
-          const bookmarks = await getBookmarksByVideoId(db, message.videoId);
+          const bookmarks = await getBookmarksByVideoId(db, message.videoId, {
+            normalized: message.normalized,
+            order: message.order,
+          });
           sendResponse({ success: true, list: bookmarks });
           break;
         }
@@ -267,7 +271,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           break;
         }
         case 'EXPORT_DATA': {
-          const videosWithBookmarks = await getBookmarks(db);
+          const videosWithBookmarks = await getVideosWithBookmarks(db);
 
           for (const video of videosWithBookmarks) {
             delete video.loopStartId;
@@ -453,25 +457,43 @@ function createBookmark(db, payload) {
   });
 }
 
-function getBookmarks(db, topVideoId = null) {
+function getVideosWithBookmarks(
+  db,
+  { topVideoId = null, normalized = false, includeBookmarks = true } = {},
+) {
   return new Promise((resolve, reject) => {
     const t = db.transaction(['videos', 'bookmarks'], 'readonly');
     const videoStore = t.objectStore('videos');
     const bmStore = t.objectStore('bookmarks');
-    const cursorReq = videoStore
+    const videosCursor = videoStore
       .index(VIDEOS_BY_CREATED_AT_IDX)
       .openCursor(null, 'prev'); // newest videos first
     const videosWithBookmarks = new Map();
 
     t.oncomplete = () => {
-      let result = [];
+      let result;
 
-      if (topVideoId && videosWithBookmarks.has(topVideoId)) {
-        result.push(videosWithBookmarks.get(topVideoId));
-        videosWithBookmarks.delete(topVideoId);
-        result.push(...videosWithBookmarks.values());
+      if (normalized) {
+        result = {
+          byId: Array.from(videosWithBookmarks.entries()),
+          ids: [],
+        };
+        if (topVideoId && videosWithBookmarks.has(topVideoId)) {
+          result.ids.push(topVideoId);
+          videosWithBookmarks.delete(topVideoId);
+          result.ids.push(...videosWithBookmarks.keys());
+        } else {
+          result.ids = Array.from(videosWithBookmarks.keys());
+        }
       } else {
-        result = Array.from(videosWithBookmarks.values());
+        result = [];
+        if (topVideoId && videosWithBookmarks.has(topVideoId)) {
+          result.push(videosWithBookmarks.get(topVideoId));
+          videosWithBookmarks.delete(topVideoId);
+          result.push(...videosWithBookmarks.values());
+        } else {
+          result = Array.from(videosWithBookmarks.values());
+        }
       }
 
       resolve(result);
@@ -481,7 +503,7 @@ function getBookmarks(db, topVideoId = null) {
       reject(t.error);
     };
 
-    cursorReq.onsuccess = (e) => {
+    videosCursor.onsuccess = (e) => {
       const cursor = e.target.result;
 
       if (cursor) {
@@ -489,12 +511,17 @@ function getBookmarks(db, topVideoId = null) {
         bmStore.index(BOOKMARKS_BY_VIDEO_ID_IDX).getAll({
           query: IDBKeyRange.only(video.videoId),
         }).onsuccess = (ev) => {
-          videosWithBookmarks.set(video.videoId, {
-            ...video,
-            bookmarks: ev.target.result.toSorted(
+          if (includeBookmarks) {
+            // sort bookmarks by createdAt desc
+            const sortedBookmarks = ev.target.result.toSorted(
               (a, b) => b.createdAt - a.createdAt,
-            ), // sort bookmarks by createdAt desc
-          });
+            );
+            // keep only ids for normalized response
+            video.bookmarks = normalized
+              ? sortedBookmarks.map((bm) => bm.id)
+              : sortedBookmarks;
+          }
+          videosWithBookmarks.set(video.videoId, video);
           cursor.continue();
         };
       }
@@ -518,7 +545,11 @@ function getBookmark(db, bookmarkId) {
   });
 }
 
-function getBookmarksByVideoId(db, videoId) {
+function getBookmarksByVideoId(
+  db,
+  videoId,
+  { normalized = false, order = 'time_asc' } = {},
+) {
   return new Promise((resolve) => {
     const t = db.transaction(['bookmarks'], 'readonly');
     const bmStore = t.objectStore('bookmarks');
@@ -527,10 +558,28 @@ function getBookmarksByVideoId(db, videoId) {
       .getAll(IDBKeyRange.only(videoId));
 
     req.onsuccess = (event) => {
-      const sortedByAscTime = event.target.result.toSorted(
-        (a, b) => a.time - b.time,
-      );
-      resolve(sortedByAscTime);
+      let sorted;
+      if (!order || order === 'time_asc') {
+        sorted = event.target.result.toSorted((a, b) => a.time - b.time);
+      }
+      if (order === 'new') {
+        sorted = event.target.result.toSorted(
+          (a, b) => b.createdAt - a.createdAt,
+        );
+      }
+      if (normalized) {
+        const result = {
+          byId: [],
+          ids: [],
+        };
+        sorted.forEach((bm) => {
+          result.byId.push([bm.id, bm]);
+          result.ids.push(bm.id);
+        });
+        resolve(result);
+      } else {
+        resolve(sorted);
+      }
     };
 
     req.onerror = () => {

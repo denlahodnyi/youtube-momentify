@@ -3,6 +3,7 @@ import { getVideoThumbnailUrl } from './popupUtils.js';
 export default class Video {
   dom;
   services;
+  videoId;
   onVideoDelete;
 
   constructor({ video, currentVideoId, services }) {
@@ -18,6 +19,7 @@ export default class Video {
         this.dom.querySelector('[data-component="video"]').open = true;
       }
 
+      this.dom.id = Video.getDomId(videoId);
       this.dom.querySelector('[data-component="thumbnail"]').src =
         getVideoThumbnailUrl(videoId);
       this.dom.querySelector('[data-component="video-title"]').textContent =
@@ -88,26 +90,41 @@ export default class Video {
     $bmList.replaceChildren(...sortedItems);
   }
 
-  pushBookmark(bookmark, $bookmark) {
-    const $bmList = this.dom.querySelector('[data-component="bookmarks-list"]');
+  static pushBookmark(videoId, bookmark, $bookmark) {
+    const $bmList = Video.find(videoId).querySelector(
+      '[data-component="bookmarks-list"]',
+    );
     const $li = document.createElement('li');
-    $li.id = `bookmark-item-${bookmark.id}`;
+    $li.id = Video.getBookmarkDomId(bookmark.id);
     $li.dataset.createdAt = bookmark.createdAt;
     $li.dataset.time = bookmark.time;
     $li.append($bookmark);
     $bmList.append($li);
   }
 
-  removeBookmark(bookmarkId) {
-    document.getElementById(`bookmark-item-${bookmarkId}`)?.remove();
+  static removeBookmark(bookmarkId) {
+    document.getElementById(Video.getBookmarkDomId(bookmarkId))?.remove();
   }
 
-  setBookmarksCount(count = 0) {
-    this.dom.querySelector('[data-component="bookmarks-count"]').textContent =
-      count;
+  static setBookmarksCount(videoId, count = 0) {
+    Video.find(videoId).querySelector(
+      '[data-component="bookmarks-count"]',
+    ).textContent = count;
   }
 
   removeVideo() {
     this.dom.remove();
+  }
+
+  static getDomId(videoId) {
+    return `video-item-${videoId}`;
+  }
+
+  static getBookmarkDomId(bookmarkId) {
+    return `bookmark-item-${bookmarkId}`;
+  }
+
+  static find(videoId) {
+    return document.getElementById(Video.getDomId(videoId));
   }
 }
