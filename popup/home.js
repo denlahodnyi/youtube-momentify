@@ -10,6 +10,7 @@ export default class HomePage {
     videos: { byId: new Map(), ids: [] },
     bookmarks: { byId: new Map(), ids: [] },
     videoBookmarks: new Map(), // videoId -> bookmarkId[]
+    boundBookmarksRenderHandlers: new Map(),
   };
 
   constructor({ videoId, handleNavToSettings }, { Services, Bookmark, Video }) {
@@ -68,22 +69,80 @@ export default class HomePage {
             '[data-component="bookmarks-list"]',
           );
           $bmList.style.display = 'block';
-          $videoItem.addEventListener(
-            'mouseenter',
-            this.renderBookmarks.bind(this, videoId),
-          );
-          $videoItem.addEventListener(
-            'focusin',
-            this.renderBookmarks.bind(this, videoId),
-          );
 
           if (this.state.videoId === videoId) {
+            // Render bookmarks immediately for the topmost video
             this.renderBookmarks(videoId);
+          } else {
+            const renderHandler = this.renderBookmarksOnIntent.bind(
+              this,
+              videoId,
+            );
+            this.state.boundBookmarksRenderHandlers.set(videoId, renderHandler);
+            $videoItem.addEventListener('mouseenter', renderHandler);
+            $videoItem.addEventListener('focusin', renderHandler);
           }
         }
       }
     } else {
       this.renderEmptyVideosMessage();
+    }
+  }
+
+  renderBookmarksOnIntent(videoId, e) {
+    const $videoItem = document.getElementById(this.Video.getDomId(videoId));
+    const $details = $videoItem.querySelector('details');
+
+    if (e.type === 'mouseenter') {
+      $videoItem.dataset.hovered = 'true';
+    }
+
+    const duplicateEvent =
+      e.type === 'focusin' && $videoItem.dataset.hovered === 'true';
+
+    if (!this.state.videoBookmarks.has(videoId) && !duplicateEvent) {
+      const clearInteractionListeners = () => {
+        $videoItem.removeEventListener(
+          'mouseenter',
+          this.state.boundBookmarksRenderHandlers.get(videoId),
+        );
+        $videoItem.removeEventListener(
+          'focusin',
+          this.state.boundBookmarksRenderHandlers.get(videoId),
+        );
+        this.state.boundBookmarksRenderHandlers.delete(videoId);
+      };
+
+      let isRendering = false;
+      const timer = setTimeout(() => {
+        if (!isRendering) {
+          isRendering = true;
+          clearInteractionListeners();
+          this.renderBookmarks(videoId);
+        }
+      }, 250);
+
+      const toggleEvent = (ev) => {
+        if (ev.target.open && !isRendering) {
+          isRendering = true;
+          clearTimeout(timer);
+          clearInteractionListeners();
+          this.renderBookmarks(videoId);
+        }
+      };
+      $details.addEventListener('toggle', toggleEvent, { once: true });
+
+      const leaveEvent = () => {
+        clearTimeout(timer);
+        $details.removeEventListener('toggle', toggleEvent);
+        delete $videoItem.dataset.hovered;
+      };
+
+      if (e.type === 'mouseenter') {
+        $videoItem.addEventListener('mouseleave', leaveEvent, { once: true });
+      } else if (e.type === 'focusin') {
+        $videoItem.addEventListener('focusout', leaveEvent, { once: true });
+      }
     }
   }
 
@@ -96,6 +155,11 @@ export default class HomePage {
   }
 
   async renderBookmarks(videoId) {
+    console.log(
+      `🚀 -> HomePage -> renderBookmarks -> this.state:`,
+      this.state,
+      this.state.videoBookmarks.has(videoId),
+    );
     if (!this.state.videoBookmarks.has(videoId)) {
       const result = await this.services.getVideoBookmarks(videoId);
 
