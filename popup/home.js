@@ -22,10 +22,36 @@ export default class HomePage {
     this.attachColorPickerListeners();
   }
 
+  async fetchVideosData() {
+    if (!this.state.videos.byId.size) {
+      const result = await this.services.getVideos(this.state.videoId);
+      if (result.success) {
+        this.state.videos.byId = new Map(result.list.byId);
+        this.state.videos.ids = result.list.ids;
+      }
+    }
+  }
+
+  async fetchBookmarksData(videoId) {
+    if (!this.state.videoBookmarks.get(videoId)) {
+      const result = await this.services.getVideoBookmarks(videoId);
+      if (result.success) {
+        this.state.bookmarks.byId = new Map([
+          ...result.list.byId,
+          ...this.state.bookmarks.byId.entries(),
+        ]);
+        this.state.bookmarks.ids.push(...result.list.ids);
+        this.state.videoBookmarks.set(videoId, result.list.ids);
+      }
+    }
+  }
+
   render($container) {
     this.renderPageLayout($container);
-    this.renderVideos();
-    this.attachSearchListeners();
+    this.fetchVideosData().then(() => {
+      this.renderVideos();
+      this.attachSearchListeners();
+    });
   }
 
   renderPageLayout($container) {
@@ -36,16 +62,14 @@ export default class HomePage {
     });
   }
 
-  async renderVideos() {
-    const result = await this.services.getVideos(this.state.videoId);
+  async renderVideos(videoIds) {
+    const ids = videoIds || this.state.videos.ids;
 
-    if (result.success && result.list.ids.length) {
-      this.state.videos.byId = new Map(result.list.byId);
-      this.state.videos.ids = result.list.ids;
-      this.setVideosCount(result.list.ids.length);
-      const $videosContainer = document.getElementById('videos-list');
+    if (ids.length) {
+      this.setVideosCount(ids.length);
+      const $videosContainer = this.findVideosContainer();
 
-      for (const videoId of result.list.ids) {
+      for (const videoId of ids) {
         const video = this.state.videos.byId.get(videoId);
 
         const createdVideo = new this.Video({
@@ -70,8 +94,11 @@ export default class HomePage {
           );
           $bmList.style.display = 'block';
 
-          if (this.state.videoId === videoId) {
-            // Render bookmarks immediately for the topmost video
+          if (
+            this.state.videoId === videoId ||
+            this.state.videoBookmarks.has(videoId)
+          ) {
+            // Render bookmarks immediately for the topmost video or if already fetched
             this.renderBookmarks(videoId);
           } else {
             const renderHandler = this.renderBookmarksOnIntent.bind(
@@ -155,40 +182,36 @@ export default class HomePage {
   }
 
   async renderBookmarks(videoId) {
-    console.log(
-      `🚀 -> HomePage -> renderBookmarks -> this.state:`,
-      this.state,
-      this.state.videoBookmarks.has(videoId),
-    );
     if (!this.state.videoBookmarks.has(videoId)) {
-      const result = await this.services.getVideoBookmarks(videoId);
+      await this.fetchBookmarksData(videoId);
+    }
 
-      if (result.success && result.list.ids.length) {
-        this.state.videoBookmarks.set(videoId, result.list.ids);
-        this.Video.setBookmarksCount(videoId, result.list.ids.length);
+    const ids = this.state.videoBookmarks.get(videoId);
 
-        for (const [bookmarkId, bookmark] of result.list.byId) {
-          this.addBookmark(bookmarkId, bookmark);
-          const createdBookmark = new this.Bookmark({
-            getBookmark: () => this.state.bookmarks.byId.get(bookmarkId),
-            services: this.services,
-          });
-          createdBookmark.onBookmarkUpdate = async (updatedBookmark) => {
-            this.state.bookmarks.byId.set(updatedBookmark.id, updatedBookmark);
-          };
-          createdBookmark.onBookmarkDelete = async () => {
-            this.Video.removeBookmark(bookmark.id);
-            this.removeBookmark(bookmark.id);
-            createdBookmark.setBookmarksCount(
-              this.state.videoBookmarks.get(videoId)?.length || 0,
-            );
-          };
-          createdBookmark.onColorPickerInvoke = ($invoker, bookmarkId) => {
-            this.state.$colorPickerInvoker = $invoker;
-            this.state.colorPickerBookmarkId = bookmarkId;
-          };
-          this.Video.pushBookmark(videoId, bookmark, createdBookmark.dom);
-        }
+    if (ids.length) {
+      this.Video.setBookmarksCount(videoId, ids.length);
+
+      for (const bookmarkId of ids) {
+        const bookmark = this.state.bookmarks.byId.get(bookmarkId);
+        const createdBookmark = new this.Bookmark({
+          getBookmark: () => this.state.bookmarks.byId.get(bookmarkId),
+          services: this.services,
+        });
+        createdBookmark.onBookmarkUpdate = async (updatedBookmark) => {
+          this.state.bookmarks.byId.set(updatedBookmark.id, updatedBookmark);
+        };
+        createdBookmark.onBookmarkDelete = async () => {
+          this.Video.removeBookmark(bookmark.id);
+          this.removeBookmark(bookmark.id);
+          createdBookmark.setBookmarksCount(
+            this.state.videoBookmarks.get(videoId)?.length || 0,
+          );
+        };
+        createdBookmark.onColorPickerInvoke = ($invoker, bookmarkId) => {
+          this.state.$colorPickerInvoker = $invoker;
+          this.state.colorPickerBookmarkId = bookmarkId;
+        };
+        this.Video.pushBookmark(videoId, bookmark, createdBookmark.dom);
       }
     }
   }
@@ -246,22 +269,30 @@ export default class HomePage {
       const formData = new FormData($searchForm);
       const value = formData.get('search').trim().toLowerCase();
 
-      // TODO: show something if no results found?
-      this.state.videos.byId.forEach((video, videoId) => {
-        const $videoItem = document.getElementById(
-          this.Video.getDomId(videoId),
-        );
-        if (video.title.toLowerCase().includes(value)) {
-          $videoItem.style.removeProperty('display');
-        } else {
-          $videoItem.style.display = 'none';
-        }
-      });
+      if (value) {
+        // TODO: show something if no results found?
+        const idsToRender = [];
+        this.state.videos.byId.forEach((video, videoId) => {
+          if (video.title.toLowerCase().includes(value)) {
+            idsToRender.push(videoId);
+          } else {
+          }
+        });
+        this.findVideosContainer()?.replaceChildren();
+        this.renderVideos(idsToRender);
+      } else {
+        this.findVideosContainer()?.replaceChildren();
+        this.renderVideos();
+      }
     });
   }
 
   setVideosCount(count = 0) {
     document.getElementById('videos-count').textContent = count;
+  }
+
+  findVideosContainer() {
+    return document.getElementById('videos-list');
   }
 
   addVideo(videoId, video) {
