@@ -51,8 +51,9 @@
 
 body {
   width: 31.25rem;
+  /* Set hight to prevent weird extension's height shrink */
+  height: 500px;
   margin: 0;
-  padding: 10px;
   font-family: Arial, sans-serif;
   color: var(--clr-foreground);
   background-color: var(--clr-background);
@@ -61,6 +62,12 @@ body {
 :focus-visible {
   outline: 2px solid blue;
   outline-offset: 2px;
+}
+
+#root {
+  max-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr;
 }
 
 .page__header {
@@ -74,6 +81,16 @@ body {
 
 .search {
   flex: 1;
+}
+
+.videos {
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.videos__list {
+  overflow: auto;
 }
 
 .video {

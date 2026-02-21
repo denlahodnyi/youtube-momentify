@@ -11,6 +11,9 @@ export default class HomePage {
     bookmarks: { byId: new Map(), ids: [] },
     videoBookmarks: new Map(), // videoId -> bookmarkId[]
     boundBookmarksRenderHandlers: new Map(),
+    filteredVideos: null, // null | videoId[]
+    renderedVideosCount: 0,
+    videosPerPage: 30,
   };
 
   constructor({ videoId, handleNavToSettings }, { Services, Bookmark, Video }) {
@@ -47,10 +50,13 @@ export default class HomePage {
   }
 
   render($container) {
+    this.state.renderedVideosCount = 0;
+    this.state.filteredVideos = null;
     this.renderPageLayout($container);
     this.fetchVideosData().then(() => {
       this.renderVideos();
-      this.attachSearchListeners();
+      this.attachLoadMoreVideos();
+      this.attachSearch();
     });
   }
 
@@ -62,14 +68,19 @@ export default class HomePage {
     });
   }
 
-  async renderVideos(videoIds) {
-    const ids = videoIds || this.state.videos.ids;
+  async renderVideos() {
+    this.setVideosCount(this.state.videos.ids.length);
+    let ids = this.state.filteredVideos || this.state.videos.ids;
+    ids = ids.slice(
+      this.state.renderedVideosCount,
+      this.state.renderedVideosCount + this.state.videosPerPage,
+    );
+    this.state.renderedVideosCount += ids.length;
 
     if (ids.length) {
-      this.setVideosCount(ids.length);
-      const $videosContainer = this.findVideosContainer();
+      const $videosList = this.findVideosList();
 
-      for (const videoId of ids) {
+      ids.forEach((videoId, i) => {
         const video = this.state.videos.byId.get(videoId);
 
         const createdVideo = new this.Video({
@@ -87,8 +98,8 @@ export default class HomePage {
         const $videoItem = createdVideo.dom;
 
         if ($videoItem) {
-          $videoItem.style.contentVisibility = 'auto';
-          $videosContainer.append($videoItem);
+          if (i > 10) $videoItem.style.contentVisibility = 'auto';
+          $videosList.append($videoItem);
           const $bmList = $videoItem.querySelector(
             '[data-component="bookmarks-list"]',
           );
@@ -110,7 +121,7 @@ export default class HomePage {
             $videoItem.addEventListener('focusin', renderHandler);
           }
         }
-      }
+      });
     } else {
       this.renderEmptyVideosMessage();
     }
@@ -262,7 +273,7 @@ export default class HomePage {
     );
   }
 
-  attachSearchListeners() {
+  attachSearch() {
     const $searchForm = document.getElementById('search');
     $searchForm.addEventListener('submit', (e) => {
       e.preventDefault();
@@ -271,18 +282,35 @@ export default class HomePage {
 
       if (value) {
         // TODO: show something if no results found?
-        const idsToRender = [];
+        this.state.renderedVideosCount = 0;
+        this.state.filteredVideos = [];
         this.state.videos.byId.forEach((video, videoId) => {
           if (video.title.toLowerCase().includes(value)) {
-            idsToRender.push(videoId);
+            this.state.filteredVideos.push(videoId);
           } else {
           }
         });
-        this.findVideosContainer()?.replaceChildren();
-        this.renderVideos(idsToRender);
-      } else {
-        this.findVideosContainer()?.replaceChildren();
+        this.findVideosList()?.replaceChildren();
         this.renderVideos();
+      } else {
+        this.state.renderedVideosCount = 0;
+        this.state.filteredVideos = null;
+        this.findVideosList()?.replaceChildren();
+        this.renderVideos();
+      }
+    });
+  }
+
+  attachLoadMoreVideos() {
+    this.findVideosList().addEventListener('scroll', (e) => {
+      if (
+        e.target.scrollTop + e.target.clientHeight >=
+        e.target.scrollHeight - 100
+      ) {
+        const ids = this.state.filteredVideos || this.state.videos.ids;
+        if (this.state.renderedVideosCount < ids.length) {
+          this.renderVideos();
+        }
       }
     });
   }
@@ -291,7 +319,7 @@ export default class HomePage {
     document.getElementById('videos-count').textContent = count;
   }
 
-  findVideosContainer() {
+  findVideosList() {
     return document.getElementById('videos-list');
   }
 
