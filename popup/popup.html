@@ -16,64 +16,26 @@
       role="menu"
       class="bm-color-picker"
     >
-      <form data-component="color-picker-form" class="bm-color-picker__form">
+      <form
+        id="color-picker-form"
+        data-component="color-picker-form"
+        class="bm-color-picker__form"
+      ></form>
+      <template id="color-picker-template">
         <label
+          data-component="color-picker-item-label"
           class="bm-color-picker__color-option"
-          style="background-color: #008b8b"
         >
-          <span class="scr-only">DarkCyan</span>
-          <input type="radio" name="color" value="#008B8B" class="scr-only" />
+          <span data-component="color-picker-item-name" class="scr-only"></span>
+          <input
+            type="radio"
+            name="color"
+            value=""
+            class="scr-only"
+            data-component="color-picker-item-input"
+          />
         </label>
-        <label
-          class="bm-color-picker__color-option"
-          style="background-color: #00bfff"
-        >
-          <span class="scr-only">DeepSkyBlue</span>
-          <input type="radio" name="color" value="#00BFFF" class="scr-only" />
-        </label>
-        <label
-          class="bm-color-picker__color-option"
-          style="background-color: #7b68ee"
-        >
-          <span class="scr-only">MediumSlateBlue</span>
-          <input type="radio" name="color" value="#7B68EE" class="scr-only" />
-        </label>
-        <label
-          class="bm-color-picker__color-option"
-          style="background-color: #90ee90"
-        >
-          <span class="scr-only">LightGreen</span>
-          <input type="radio" name="color" value="#90EE90" class="scr-only" />
-        </label>
-        <label
-          class="bm-color-picker__color-option"
-          style="background-color: #ff7f50"
-        >
-          <span class="scr-only">Coral</span>
-          <input type="radio" name="color" value="#FF7F50" class="scr-only" />
-        </label>
-        <label
-          class="bm-color-picker__color-option"
-          style="background-color: #ffdead"
-        >
-          <span class="scr-only">NavajoWhite</span>
-          <input type="radio" name="color" value="#FFDEAD" class="scr-only" />
-        </label>
-        <label
-          class="bm-color-picker__color-option"
-          style="background-color: #ee82ee"
-        >
-          <span class="scr-only">Violet</span>
-          <input type="radio" name="color" value="#EE82EE" class="scr-only" />
-        </label>
-        <label
-          class="bm-color-picker__color-option"
-          style="background-color: #ffff00"
-        >
-          <span class="scr-only">Yellow</span>
-          <input type="radio" name="color" value="#FFFF00" class="scr-only" />
-        </label>
-      </form>
+      </template>
     </div>
 
     <template id="home-template">

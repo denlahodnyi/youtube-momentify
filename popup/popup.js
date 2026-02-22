@@ -4,11 +4,13 @@ import SettingsPage from './settings.js';
 import Services from './services.js';
 import Bookmark from './bookmark.js';
 import Video from './video.js';
+import { setupColorPicker } from './colorPicker.js';
 
 const $root = document.getElementById('root');
 const videoId = await getVideoId();
 const homePage = new HomePage({ videoId }, { Services, Bookmark, Video });
 const settingsPage = new SettingsPage({ Services });
+setupColorPicker();
 
 homePage.onNavigate = () => {
   if ($root) {
