@@ -97,18 +97,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       switch (message.action) {
         case 'CREATE_BOOKMARK': {
           const { video, bookmark, error } = await createBookmark(db, message);
-          const tabs = await getCurrentVideoTabs(video.videoId);
 
-          if (!error && tabs.length) {
-            for (const tab of tabs) {
-              chrome.tabs.sendMessage(tab.id, {
-                action: 'CONTENT/CREATE_BOOKMARKS',
-                bookmarks: [bookmark],
-              });
+          if (!error) {
+            const tabs = await getCurrentVideoTabs(video.videoId);
+            if (tabs.length) {
+              for (const tab of tabs) {
+                chrome.tabs.sendMessage(tab.id, {
+                  action: 'CONTENT/CREATE_BOOKMARKS',
+                  bookmarks: [bookmark],
+                });
+              }
             }
           }
 
-          sendResponse({ success: !!error, video, bookmark, error });
+          sendResponse({ success: !error, video, bookmark, error });
           break;
         }
         case 'GET_VIDEOS_WITH_BOOKMARKS': {
@@ -320,7 +322,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           console.warn('Unknown action:', message.action);
       }
     } catch (err) {
-      console.error('Messages listener error', err?.message);
+      console.error('Messages listener error:', err?.message);
     }
   })();
 
@@ -395,7 +397,7 @@ function openDatabase() {
 }
 
 function createBookmark(db, payload) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const t = db.transaction(['videos', 'bookmarks'], 'readwrite');
     const videoStore = t.objectStore('videos');
     let video;
@@ -406,7 +408,7 @@ function createBookmark(db, payload) {
     };
 
     t.onabort = () => {
-      reject(t.error);
+      resolve({ error: t.error?.message, exception: t.error });
     };
 
     videoStore.get(payload.videoId).onsuccess = (event) => {

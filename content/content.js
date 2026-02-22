@@ -126,7 +126,6 @@ class ContentRenderer {
 
         if ($video) {
           const { bookmarks } = event.payload;
-
           for (const bookmark of bookmarks) {
             const mark = this.buildBookmark(bookmark, $video.duration);
             if (mark) ProgressBar.pushBookmark(mark.dom);
@@ -150,6 +149,7 @@ class ContentRenderer {
             title,
             color,
           });
+          sender?.notify?.({ type: 'success' });
         } else {
           console.error('[momentify] No video element found');
         }
@@ -323,8 +323,8 @@ class ContentRenderer {
         'showQuickSave',
         'showEditedSave',
       ]);
-      const quickSaveButton = new this.BookmarkButton();
-      const saveWithEditButton = new this.BookmarkButton(true);
+      const quickSaveButton = new this.BookmarkButton(true);
+      const saveWithEditButton = new this.BookmarkButton(false);
       quickSaveButton.setMediator(this);
       saveWithEditButton.setMediator(this);
       quickSaveButton.dom.hidden = !settings.showQuickSave;
@@ -493,12 +493,24 @@ class BookmarkButton {
     const color = isQuick ? 'red' : 'blue';
     const label = isQuick ? 'Save quick bookmark' : 'Edit and save bookmark';
     const $button = createDomElement(`
-        <button id=${this.id} aria-label="${label}" class="ytp-button" style="display: flex; align-items: center; justify-content: center; color: ${color}">
+        <button id=${this.id} aria-label="${label}" class="momentify-bookmark-btn ytp-button" style="display: flex; align-items: center; justify-content: center; color: ${color}">
           <svg aria-hidden xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-bookmark-icon lucide-bookmark"><path d="M17 3a2 2 0 0 1 2 2v15a1 1 0 0 1-1.496.868l-4.512-2.578a2 2 0 0 0-1.984 0l-4.512 2.578A1 1 0 0 1 5 20V5a2 2 0 0 1 2-2z"/></svg>
         </button>
       `);
+    const $video = document.querySelector('video');
+    $button.disabled = $video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA;
     $button.addEventListener('click', this.handleSaveBookmark.bind(this));
     this.dom = $button;
+
+    document.querySelector('video').addEventListener(
+      'loadeddata',
+      () => {
+        if ($video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+          $button.disabled = false;
+        }
+      },
+      { once: true },
+    );
   }
 
   setMediator(mediator) {
@@ -507,12 +519,21 @@ class BookmarkButton {
 
   handleSaveBookmark() {
     if (this.isQuick) {
+      this.dom.disabled = true;
+      this.dom.dataset.loading = true;
       this.mediator?.notify(this, { type: 'api/save_bookmark' });
     } else {
       this.mediator?.notify(this, {
         type: 'ui/open_bookmark_edit_modal',
         payload: { isNewBookmark: true },
       });
+    }
+  }
+
+  notify({ type }) {
+    if (type === 'success') {
+      this.dom.disabled = false;
+      this.dom.dataset.loading = false;
     }
   }
 
