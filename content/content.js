@@ -36,6 +36,13 @@ class ContentRenderer {
 
     this.boundLoopHandler = this.handleLoop.bind(this);
 
+    document
+      .querySelector('video')
+      ?.addEventListener(
+        'durationchange',
+        this.adjustMarksOnDurationChange.bind(this),
+      );
+
     observeUrlChange((newUrl) => {
       this.state.videoId = getVideoIdFromUrl(newUrl);
       this.render();
@@ -466,6 +473,15 @@ class ContentRenderer {
 
     return mark;
   }
+
+  adjustMarksOnDurationChange(e) {
+    const marks = this.Mark.findAllBookmarks();
+    if (marks) {
+      marks.forEach(($m) => {
+        $m.style.left = `${this.Mark.getMarkOffset(Number($m.dataset.time), e.target.duration)}%`;
+      });
+    }
+  }
 }
 
 let lastUrl = location.href;
@@ -606,7 +622,7 @@ class Mark {
       <button id="${Mark.createMarkDomId(id)}" tabindex="0" aria-haspopup="dialog" aria-label="Bookmark" data-time="${time}" data-component="mark" class="momentify-mark" style="
         position: absolute;
         top: 50%;
-        left: ${(time / duration) * 100}%;
+        left: ${Mark.getMarkOffset(time, duration)}%;
         translate: 0 -50%;
         z-index: 1000;
         width: 1px;
@@ -790,6 +806,10 @@ class Mark {
 
   static getInstance(bookmarkId) {
     return Mark.find(bookmarkId)?._state?.instance;
+  }
+
+  static getMarkOffset(time, duration) {
+    return (time / duration) * 100;
   }
 
   setMediator(mediator) {
