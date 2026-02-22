@@ -4,6 +4,8 @@ import {
   getCurrentVideoTabs,
   getVideoUrlWithTime,
 } from './popupUtils.js';
+const BOOKMARK_TITLE_CONSTRAINS = { min: 1, max: 80 };
+const BOOKMARK_NOTE_CONSTRAINS = { min: 0, max: 200 };
 
 export default class Bookmark {
   dom;
@@ -37,6 +39,11 @@ export default class Bookmark {
         '[data-component="bookmark-title-chars-count"]',
       );
       $titleInput.value = bookmark.title;
+      $titleInput.setAttribute('minLength', BOOKMARK_TITLE_CONSTRAINS.min);
+      $titleInput.setAttribute('maxLength', BOOKMARK_TITLE_CONSTRAINS.max);
+      this.dom.querySelector(
+        '[data-component="bookmark-title-chars-max-count"]',
+      ).textContent = BOOKMARK_TITLE_CONSTRAINS.max;
       $titleCharsCount.textContent = $titleInput.value.length;
       $titleInput.addEventListener('input', (e) => {
         $titleCharsCount.textContent = e.target.value.length;
@@ -73,7 +80,12 @@ export default class Bookmark {
         '[data-component="bookmark-note-chars-count"]',
       );
       $noteInput.value = bookmark.note || '';
+      $noteInput.setAttribute('minLength', BOOKMARK_NOTE_CONSTRAINS.min);
+      $noteInput.setAttribute('maxLength', BOOKMARK_NOTE_CONSTRAINS.max);
       $noteCharsCount.textContent = bookmark.note.length || 0;
+      this.dom.querySelector(
+        '[data-component="bookmark-note-chars-max-count"]',
+      ).textContent = BOOKMARK_NOTE_CONSTRAINS.max;
       $noteInput.addEventListener('input', (e) => {
         $noteCharsCount.textContent = e.target.value.length;
       });

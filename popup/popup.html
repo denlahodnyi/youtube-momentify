@@ -317,15 +317,13 @@
             <textarea
               data-component="bookmark-title-input"
               name="title"
-              minlength="1"
-              maxlength="80"
               required
             ></textarea>
             <span aria-live="polite" aria-atomic="false">
               <span class="scr-only">Characters remaining</span>
               <span data-component="bookmark-title-chars-count">0</span>/<span
-                >80</span
-              >
+                data-component="bookmark-title-chars-max-count"
+              ></span>
             </span>
           </label>
           <p data-component="bookmark-timestamp" class="bm__time"></p>
@@ -405,15 +403,13 @@
             <textarea
               data-component="bookmark-note-input"
               name="note"
-              minlength="0"
-              maxlength="200"
               placeholder="Add a note (optional)"
             ></textarea>
             <span aria-live="polite" aria-atomic="false">
               <span class="scr-only">Characters remaining</span>
               <span data-component="bookmark-note-chars-count">0</span>/<span
-                >200</span
-              >
+                data-component="bookmark-note-chars-max-count"
+              ></span>
             </span>
           </details>
         </div>
