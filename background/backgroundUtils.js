@@ -23,6 +23,43 @@ export class ValidationError extends Error {
   }
 }
 
+export function validateBookmark({ title, color, note = '' }, constrains = {}) {
+  if (constrains.bookmarkTitle.required && !title) {
+    throw new ValidationError('Bookmark title is required');
+  }
+  if (
+    typeof bookmarkTitle === 'string' &&
+    constrains.bookmarkTitle &&
+    (title.length < constrains.bookmarkTitle.min ||
+      title.length > constrains.bookmarkTitle.max)
+  ) {
+    throw new ValidationError(
+      `Bookmark title must be between ${constrains.bookmarkTitle.min} and ${constrains.bookmarkTitle.max} characters`,
+    );
+  }
+
+  if (constrains.bookmarkNote.required && !note) {
+    throw new ValidationError('Bookmark title is required');
+  }
+  if (
+    typeof bookmarkNote === 'string' &&
+    constrains.bookmarkNote &&
+    (note.length < constrains.bookmarkNote.min ||
+      note.length > constrains.bookmarkNote.max)
+  ) {
+    throw new ValidationError(
+      `Bookmark note must be between ${constrains.bookmarkNote.min} and ${constrains.bookmarkNote.max} characters`,
+    );
+  }
+
+  if (constrains.bookmarkColor.required && !color) {
+    throw new ValidationError('Bookmark title is required');
+  }
+  if (typeof color === 'string' && !validateHex(color)) {
+    throw new ValidationError('Bookmark color must be a valid hex code');
+  }
+}
+
 export function validateImportedData(data, latestVersion, constrains = {}) {
   if (!data || typeof data !== 'object') {
     throw new ValidationError('Invalid data format: expected an object');

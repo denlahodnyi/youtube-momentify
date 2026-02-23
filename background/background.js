@@ -1,7 +1,7 @@
 import {
   getCurrentVideoTabs,
   getYoutubeVideoTabPattern,
-  validateHex,
+  validateBookmark,
   validateImportedData,
   ValidationError,
 } from './backgroundUtils.js';
@@ -96,9 +96,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       switch (message.action) {
         case 'CREATE_BOOKMARK': {
-          const { video, bookmark, error } = await createBookmark(db, message);
-
-          if (!error) {
+          try {
+            validateBookmark(message, {
+              bookmarkTitle: {
+                ...BOOKMARK_TITLE_CONSTRAINS,
+                required: !!message.title,
+              },
+              bookmarkNote: BOOKMARK_NOTE_CONSTRAINS,
+              bookmarkColor: { required: !!message.color },
+            });
+            const { video, bookmark } = await createBookmark(db, message);
             const tabs = await getCurrentVideoTabs(video.videoId);
             if (tabs.length) {
               for (const tab of tabs) {
@@ -108,9 +115,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 });
               }
             }
-          }
 
-          sendResponse({ success: !error, video, bookmark, error });
+            sendResponse({ success: true, video, bookmark });
+          } catch (err) {
+            const errorMessage =
+              err instanceof ValidationError
+                ? err.message
+                : 'Failed to create new bookmark';
+            sendResponse({ success: false, error: errorMessage });
+          }
           break;
         }
         case 'GET_VIDEOS_WITH_BOOKMARKS': {
@@ -154,27 +167,33 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           break;
         }
         case 'UPDATE_BOOKMARK': {
-          const { bookmark } = message;
-          const result = await updateBookmark(db, bookmark);
-
-          if (!result?.error) {
+          const { bookmark: updBookmark } = message;
+          try {
+            validateBookmark(updBookmark, {
+              bookmarkTitle: { ...BOOKMARK_TITLE_CONSTRAINS, required: true },
+              bookmarkNote: BOOKMARK_NOTE_CONSTRAINS,
+              bookmarkColor: { required: true },
+            });
+            const { bookmark } = await updateBookmark(db, updBookmark);
             const tabs = await getCurrentVideoTabs(bookmark.videoId);
 
             if (tabs.length) {
               for (const tab of tabs) {
                 chrome.tabs.sendMessage(tab.id, {
                   action: 'CONTENT/UPDATE_BOOKMARK',
-                  bookmark: result.bookmark,
+                  bookmark: bookmark,
                 });
               }
             }
-          }
 
-          sendResponse(
-            result?.error
-              ? { success: false, error: result.error }
-              : { success: true, bookmark: result.bookmark },
-          );
+            sendResponse({ success: true, bookmark: bookmark });
+          } catch (err) {
+            const errorMessage =
+              err instanceof ValidationError
+                ? err.message
+                : 'Failed to update bookmark';
+            sendResponse({ success: false, error: errorMessage });
+          }
           break;
         }
         case 'SAVE_VIDEO_LOOP': {
@@ -398,7 +417,7 @@ function openDatabase() {
 }
 
 function createBookmark(db, payload) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const t = db.transaction(['videos', 'bookmarks'], 'readwrite');
     const videoStore = t.objectStore('videos');
     let video;
@@ -409,7 +428,21 @@ function createBookmark(db, payload) {
     };
 
     t.onabort = () => {
-      resolve({ error: t.error?.message, exception: t.error });
+      reject(t.error);
+    };
+
+    t.objectStore('bookmarks').add({
+      id: crypto.randomUUID(),
+      videoId: payload.videoId,
+      time: Math.floor(payload.time),
+      title: payload.title ?? new Date().toLocaleString(),
+      note: '',
+      color: payload.color ?? DEFAULT_MARK_COLOR,
+      createdAt: new Date().getTime(),
+    }).onsuccess = (e) => {
+      t.objectStore('bookmarks').get(e.target.result).onsuccess = (ev) => {
+        bookmark = ev.target.result;
+      };
     };
 
     videoStore.get(payload.videoId).onsuccess = (event) => {
@@ -428,34 +461,6 @@ function createBookmark(db, payload) {
           };
         };
       }
-    };
-
-    if (
-      payload.title &&
-      (payload.title.length < BOOKMARK_TITLE_CONSTRAINS.min ||
-        payload.title.length > BOOKMARK_TITLE_CONSTRAINS.max)
-    ) {
-      resolve({
-        error: `Bookmark title must be between ${BOOKMARK_TITLE_CONSTRAINS.min} and ${BOOKMARK_TITLE_CONSTRAINS.max} characters`,
-      });
-    }
-
-    if (payload.color && !validateHex(payload.color)) {
-      resolve({ error: 'Bookmark color must be a valid hex code' });
-    }
-
-    t.objectStore('bookmarks').add({
-      id: crypto.randomUUID(),
-      videoId: payload.videoId,
-      time: payload.time,
-      title: payload.title ?? new Date().toLocaleString(),
-      note: '',
-      color: payload.color ?? DEFAULT_MARK_COLOR,
-      createdAt: new Date().getTime(),
-    }).onsuccess = (e) => {
-      t.objectStore('bookmarks').get(e.target.result).onsuccess = (ev) => {
-        bookmark = ev.target.result;
-      };
     };
   });
 }
@@ -644,24 +649,6 @@ function updateBookmark(db, bookmark) {
   return new Promise((resolve, reject) => {
     const t = db.transaction(['bookmarks'], 'readwrite');
     const bmStore = t.objectStore('bookmarks');
-
-    if (
-      bookmark.title.length < BOOKMARK_TITLE_CONSTRAINS.min ||
-      bookmark.title.length > BOOKMARK_TITLE_CONSTRAINS.max
-    ) {
-      resolve({
-        error: `Bookmark title must be between ${BOOKMARK_TITLE_CONSTRAINS.min} and ${BOOKMARK_TITLE_CONSTRAINS.max} characters`,
-      });
-    }
-    if (bookmark.note.length > BOOKMARK_TITLE_CONSTRAINS.max) {
-      resolve({
-        error: `Bookmark note must be less than ${BOOKMARK_NOTE_CONSTRAINS.max} characters`,
-      });
-    }
-    if (!bookmark.color || !validateHex(bookmark.color)) {
-      resolve({ error: 'Bookmark color must be a valid hex code' });
-    }
-
     const req = bmStore.put(bookmark);
 
     req.onsuccess = () => {

@@ -864,7 +864,7 @@ class Mark {
         position: absolute;
         top: 50%;
         left: ${Mark.getMarkOffset(time, duration)}%;
-        translate: 0 -50%;
+        translate: -50% -50%;
         z-index: 1000;
         width: 1px;
         height: 8px;
