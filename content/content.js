@@ -1,5 +1,4 @@
 // TODO: fix context loose error (https://stackoverflow.com/questions/53939205/how-to-avoid-extension-context-invalidated-errors-when-messaging-after-an-exte)
-console.log('SCRIPT RUNNING');
 const QUICK_SAVE_BTN_ID = 'momentify-save-bookmark-btn';
 const SAVE_WITH_EDIT_BTN_ID = 'momentify-save-with-edit-bookmark-btn';
 const TIMESTAMPS_OUTER_CONTAINER_ID = 'momentify-bar';
@@ -11,13 +10,21 @@ class ContentRenderer {
     videoId: getVideoIdFromUrl(location.href),
     loopStartTime: 0,
     loopEndTime: 0,
+    bookmarks: {
+      byId: new Map(),
+      ids: [], // Must be always sorted in ASC (by time)
+      suspended: [],
+    },
+    video: null,
+    tempLoopStartId: null,
   };
-  popupsContainerId = 'momentify-bookmark-popups-container';
+  static popupsContainerId = 'momentify-bookmark-popups-container';
 
-  BookmarkButton;
-  ProgressBar;
-  Mark;
-  BookmarkEditModalCreator;
+  bookmarkButtonFactory;
+  progressBarFactory;
+  markFactory;
+  markPopupFactory;
+  bookmarkEditModalFactory;
   services;
   bookmarkModal;
 
@@ -25,23 +32,18 @@ class ContentRenderer {
     BookmarkButton,
     ProgressBar,
     Mark,
+    MarkPopup,
     BookmarkEditModal,
     Services,
   }) {
-    this.BookmarkButton = BookmarkButton;
-    this.ProgressBar = ProgressBar;
-    this.Mark = Mark;
-    this.BookmarkEditModalCreator = BookmarkEditModal;
+    this.bookmarkButtonFactory = BookmarkButton;
+    this.progressBarFactory = ProgressBar;
+    this.markFactory = Mark;
+    this.markPopupFactory = MarkPopup;
+    this.bookmarkEditModalFactory = BookmarkEditModal;
     this.services = Services;
 
     this.boundLoopHandler = this.handleLoop.bind(this);
-
-    document
-      .querySelector('video')
-      ?.addEventListener(
-        'durationchange',
-        this.adjustMarksOnDurationChange.bind(this),
-      );
 
     observeUrlChange((newUrl) => {
       this.state.videoId = getVideoIdFromUrl(newUrl);
@@ -52,12 +54,12 @@ class ContentRenderer {
   async notify(sender, event) {
     switch (event.type) {
       case 'ui/toggle_quick_save': {
-        const $button = BookmarkButton.find(true);
+        const $button = this.bookmarkButtonFactory.find(true);
         if ($button) $button.hidden = !event.payload.show;
         break;
       }
       case 'ui/toggle_edited_save': {
-        const $button = BookmarkButton.find();
+        const $button = this.bookmarkButtonFactory.find();
         if ($button) $button.hidden = !event.payload.show;
         break;
       }
@@ -76,14 +78,22 @@ class ContentRenderer {
         const $video = document.querySelector('video');
 
         if ($video) {
-          const timestamps = Array.from(Mark.findAllBookmarks()).map(($b) =>
-            Number($b.dataset.time),
-          );
+          const timestamps = this.state.bookmarks.ids
+            .map((id) => {
+              if (!this.state.bookmarks.suspended.includes(id)) {
+                return this.state.bookmarks.byId.get(id).time;
+              }
+            })
+            .filter((time) => typeof time !== 'undefined');
           let next = timestamps[0];
 
           for (let a = 0, b = timestamps.length - 1; a <= b; a++, b--) {
             if (timestamps[a] > $video.currentTime) {
               next = timestamps[a];
+              break;
+            }
+            if (timestamps.length === 2 && timestamps[b] > $video.currentTime) {
+              next = timestamps[b];
               break;
             }
             if (timestamps[b] <= $video.currentTime) {
@@ -104,14 +114,25 @@ class ContentRenderer {
         const $video = document.querySelector('video');
 
         if ($video) {
-          const timestamps = Array.from(Mark.findAllBookmarks()).map(($b) =>
-            Number($b.dataset.time),
-          );
+          const timestamps = this.state.bookmarks.ids
+            .map((id) => {
+              if (!this.state.bookmarks.suspended.includes(id)) {
+                return this.state.bookmarks.byId.get(id).time;
+              }
+            })
+            .filter((time) => typeof time !== 'undefined');
           let next = timestamps.at(-1);
 
           for (let a = 0, b = timestamps.length - 1; a <= b; a++, b--) {
             if (timestamps[a] >= $video.currentTime) {
               next = timestamps.at(a === 0 ? -1 : a - 1);
+              break;
+            }
+            if (
+              timestamps.length === 2 &&
+              timestamps[b] >= $video.currentTime
+            ) {
+              next = timestamps[a];
               break;
             }
             if (timestamps[b] < $video.currentTime) {
@@ -133,9 +154,26 @@ class ContentRenderer {
 
         if ($video) {
           const { bookmarks } = event.payload;
-          for (const bookmark of bookmarks) {
-            const mark = this.buildBookmark(bookmark, $video.duration);
-            if (mark) ProgressBar.pushBookmark(mark.dom);
+
+          const marks = bookmarks.map((bm) => {
+            if (!this.state.bookmarks.byId.has(bm.id)) {
+              this.state.bookmarks.byId.set(bm.id, bm);
+              this.state.bookmarks.ids.push(bm.id);
+            }
+            return this.buildBookmark(bm, $video.duration).dom;
+          });
+          this.renderNewMarks(...marks);
+
+          if (!this.state.video) {
+            // Set video if we receive bookmarks for the first time
+            const result = await this.services.getVideo({
+              videoId: this.state.videoId,
+            });
+            if (result.success) {
+              this.state.video = result.video;
+            } else {
+              console.error('[momentify] Cannot set video data');
+            }
           }
         } else {
           console.error('[momentify] No video element found');
@@ -149,7 +187,7 @@ class ContentRenderer {
         const videoTitle = getVideoTitle();
 
         if ($video) {
-          await this.services.createBookmark({
+          const result = await this.services.createBookmark({
             videoTitle,
             videoId: this.state.videoId,
             time: time ?? $video.currentTime,
@@ -157,6 +195,18 @@ class ContentRenderer {
             color,
           });
           sender?.notify?.({ type: 'success' });
+
+          if (result.success) {
+            // Set video if we save bookmark for the first time
+            const result = await this.services.getVideo({
+              videoId: this.state.videoId,
+            });
+            if (result.success) {
+              this.state.video = result.video;
+            } else {
+              console.error('[momentify] Cannot set video data');
+            }
+          }
         } else {
           console.error('[momentify] No video element found');
         }
@@ -169,27 +219,40 @@ class ContentRenderer {
       }
       case 'ui/update_bookmark': {
         const { bookmark } = event.payload;
-        const markInstance = Mark.getInstance(bookmark.id);
+        this.state.bookmarks.byId.set(bookmark.id, bookmark);
 
-        if (markInstance) markInstance.syncState({ bookmark });
+        const $mark = this.markFactory.findMark(bookmark.id);
+        if ($mark) $mark.style.backgroundColor = bookmark.color;
+
+        const $popupTitle = this.markPopupFactory.findPopupTitle(bookmark.id);
+        if ($popupTitle) $popupTitle.textContent = bookmark.title;
 
         break;
       }
       case 'ui/refresh_bookmarks': {
+        this.cleanupBookmarksData();
         this.renderProgressBar();
         break;
       }
       case 'ui/open_bookmark_edit_modal': {
-        const { bookmark, isNewBookmark = false } = event.payload || {};
+        const { bookmarkId, isNewBookmark = false } = event.payload || {};
         const $video = document.querySelector('video');
         $video?.pause();
         this.bookmarkModal.syncState({
           isNewBookmark,
           bookmark: isNewBookmark
             ? { title: new Date().toLocaleString(), time: $video.currentTime }
-            : bookmark,
+            : this.state.bookmarks.byId.get(bookmarkId),
         });
         this.bookmarkModal.open();
+        break;
+      }
+      case 'ui/open_bookmark_details': {
+        const { bookmarkId } = event.payload;
+        this.markPopupFactory.closeAllPopups();
+        const $popup = this.markPopupFactory.findPopup(bookmarkId);
+        this.setMarkLoopUI(bookmarkId);
+        $popup.show();
         break;
       }
       case 'api/delete_bookmark': {
@@ -200,17 +263,49 @@ class ContentRenderer {
       case 'ui/delete_bookmark': {
         const { bookmarkId } = event.payload;
 
-        await this.notify(null, {
-          type: 'ui/clear_loop_ui_by_bookmarkId',
-          payload: { bookmarkId },
-        });
-        Mark.removeMark(bookmarkId);
+        if (
+          bookmarkId === this.state.tempLoopStartId ||
+          bookmarkId === this.state.video.loopStartId ||
+          bookmarkId === this.state.video.loopEndId
+        ) {
+          await this.notify(null, {
+            type: 'ui/remove_video_loop',
+          });
+        }
+        this.markFactory.removeMark(bookmarkId);
+        this.markPopupFactory.removePopup(bookmarkId);
+        this.state.bookmarks.byId.delete(bookmarkId);
+        this.state.bookmarks.ids = this.state.bookmarks.ids.filter(
+          (id) => id !== bookmarkId,
+        );
 
         break;
       }
       case 'ui/delete_all_bookmarks': {
-        ProgressBar.clearContent();
-        this.removeVideoLoop();
+        this.cleanupBookmarksData();
+        break;
+      }
+      case 'ui/manage_loop': {
+        const { action, bookmarkId } = event.payload;
+
+        if (action === 'start') {
+          this.state.tempLoopStartId = bookmarkId;
+          this.setMarkLoopUI(bookmarkId);
+        } else if (action === 'finish') {
+          this.notify(null, {
+            type: 'api/save_loop',
+            payload: {
+              loopStartId:
+                this.state.video.loopStartId || this.state.tempLoopStartId,
+              loopEndId: bookmarkId,
+            },
+          });
+        } else if (action === 'delete') {
+          this.notify(null, {
+            type: 'api/delete_loop',
+            payload: { bookmarkId },
+          });
+        }
         break;
       }
       case 'api/save_loop': {
@@ -222,86 +317,55 @@ class ContentRenderer {
         });
         break;
       }
-      case 'ui/set_video_loop': {
-        const { loopStartId, loopEndId } = event.payload;
-        Array.from(
-          this.Mark.findAllLoopMarks(this.ProgressBar.findMarksContainer()),
-        )
-          .filter(
-            ($m) =>
-              this.Mark.getBookmarkIdFromDom($m) !== loopStartId &&
-              this.Mark.getBookmarkIdFromDom($m) !== loopEndId,
-          )
-          .forEach(($m) => {
-            this.Mark.syncMarkLoopUI($m);
-          });
-        const $startMark = this.Mark.findMark(loopStartId);
-        const $endMark = this.Mark.findMark(loopEndId);
+      case 'ui/apply_video_loop': {
+        const { loopStartId, loopEndId, videoId } = event.payload;
+        const { loopStartId: prevStart, loopEndId: prevEnd } = this.state.video;
 
-        if ($startMark && $endMark) {
-          this.Mark.syncMarkLoopUI($startMark, 'start');
-          this.Mark.syncMarkLoopUI($endMark, 'finish');
+        if (this.state.videoId === videoId) {
+          if (prevStart) this.setMarkLoopUI(prevStart, true);
+          if (prevEnd) this.setMarkLoopUI(prevEnd, true);
+          this.state.video.loopStartId = loopStartId;
+          this.state.video.loopEndId = loopEndId;
+          this.state.tempLoopStartId = null;
+          this.setMarkLoopUI(loopStartId);
+          this.setMarkLoopUI(loopEndId);
           this.setupVideoLoop(loopStartId, loopEndId);
         }
 
         break;
       }
       case 'api/delete_loop': {
-        const $loopMarks = this.Mark.findLoopMarks(
-          this.ProgressBar.findMarksContainer(),
-        );
+        const { loopStartId, loopEndId } = this.state.video || {};
 
-        if ($loopMarks[0] && $loopMarks[1]) {
+        if (loopStartId && loopEndId) {
           await this.services.deleteLoop({
             videoId: this.state.videoId,
           });
         } else {
-          this.Mark.syncMarkLoopUI(sender.mark);
+          const startLoopId = this.state.tempLoopStartId;
+          this.state.tempLoopStartId = null;
+          this.setMarkLoopUI(startLoopId, true);
         }
         break;
       }
       case 'ui/remove_video_loop': {
-        this.notify(null, { type: 'ui/clear_loop_ui' });
-        break;
-      }
-      case 'ui/clear_loop_ui': {
+        const { loopStartId, loopEndId } = this.state.video || {};
+        this.state.video.loopStartId = null;
+        this.state.video.loopEndId = null;
+        this.state.tempLoopStartId = null;
         this.removeVideoLoop();
-        const $loopMarks = this.Mark.findLoopMarks(
-          this.ProgressBar.findMarksContainer(),
-        );
-
-        if ($loopMarks[0]) {
-          this.Mark.syncMarkLoopUI($loopMarks[0]);
-        }
-        if ($loopMarks[1]) {
-          this.Mark.syncMarkLoopUI($loopMarks[1]);
-        }
-        break;
-      }
-      case 'ui/clear_loop_ui_by_bookmarkId': {
-        const { bookmarkId } = event.payload;
-        const $loopMarks = this.Mark.findLoopMarks(
-          this.ProgressBar.findMarksContainer(),
-        );
-
-        if ($loopMarks[0] && $loopMarks[1]) {
-          const startId = this.Mark.getBookmarkIdFromDom($loopMarks[0]);
-          const endId = this.Mark.getBookmarkIdFromDom($loopMarks[1]);
-
-          if (startId === bookmarkId || endId === bookmarkId) {
-            this.removeVideoLoop();
-            this.Mark.syncMarkLoopUI($loopMarks[0]);
-            this.Mark.syncMarkLoopUI($loopMarks[1]);
-          }
-        }
+        this.setMarkLoopUI(loopStartId, true);
+        this.setMarkLoopUI(loopEndId, true);
         break;
       }
       default:
+        console.warn('[momentify] Unknown mediator event');
         break;
     }
   }
 
   render() {
+    this.cleanupBookmarksData();
     this.renderPopupsContainer();
     this.renderBookmarkButton();
     this.renderBookmarkEditModal();
@@ -309,33 +373,48 @@ class ContentRenderer {
   }
 
   renderPopupsContainer() {
-    // Render out of .ytp-progress-bar to prevent issue with containing block
+    // Render out of .ytp-progress-bar to prevent issue with containing block:
+    // .ytp-progress-bar may have transform style (on slide up), that affects
+    // popup positioning using anchor-positioning
     const $YTprogressBarContainer = document.querySelector(
       '.ytp-progress-bar-container',
     );
-    if ($YTprogressBarContainer) {
+
+    if (!$YTprogressBarContainer) {
+      console.error('[momentify] Cannot find YouTube progress bar container');
+    }
+
+    const $popupsContainer = document.getElementById(
+      ContentRenderer.popupsContainerId,
+    );
+
+    if ($YTprogressBarContainer && !$popupsContainer) {
       $YTprogressBarContainer.append(
         createDomElement(`
-        <div id="${this.popupsContainerId}"></div>
+        <div id="${ContentRenderer.popupsContainerId}"></div>
       `),
       );
-    } else {
-      console.error('[momentify] Cannot find YouTube progress bar container');
     }
   }
 
   async renderBookmarkButton() {
-    if (this.state.videoId && !BookmarkButton.find(true)) {
+    let quickSave = BookmarkButton.find(true);
+    let editedSave = BookmarkButton.find(false);
+
+    if (this.state.videoId && !quickSave) {
       const settings = await chrome.storage.local.get([
         'showQuickSave',
         'showEditedSave',
       ]);
-      const quickSaveButton = new this.BookmarkButton(true);
-      const saveWithEditButton = new this.BookmarkButton(false);
+      const quickSaveButton = new this.bookmarkButtonFactory(true);
+      const saveWithEditButton = new this.bookmarkButtonFactory(false);
       quickSaveButton.setMediator(this);
       saveWithEditButton.setMediator(this);
+      quickSave = quickSaveButton.dom;
+      editedSave = saveWithEditButton.dom;
       quickSaveButton.dom.hidden = !settings.showQuickSave;
       saveWithEditButton.dom.hidden = !settings.showEditedSave;
+
       const $controlsContainer = document.body.querySelector(
         '#movie_player .ytp-right-controls',
       );
@@ -350,22 +429,46 @@ class ContentRenderer {
           saveWithEditButton.dom,
         );
       } else {
-        console.error('No controls container found');
+        console.error('[momentify] No controls container found');
       }
     }
+
+    // Disable button if data is not ready
+    const $video = document.querySelector('video');
+    // On loadeddata event we can even not observe status > HAVE_METADATA, so
+    // use that flag as a minimal proof of ready data
+    quickSave.disabled = $video.readyState < HTMLMediaElement.HAVE_METADATA;
+    editedSave.disabled = $video.readyState < HTMLMediaElement.HAVE_METADATA;
+
+    // Wait for data on every video change
+    document.querySelector('video').addEventListener(
+      'loadstart',
+      (e) => {
+        quickSave.disabled = true;
+        editedSave.disabled = true;
+      },
+      { once: true },
+    );
+    document.querySelector('video').addEventListener(
+      'loadeddata',
+      (e) => {
+        if ($video.readyState >= HTMLMediaElement.HAVE_METADATA) {
+          quickSave.disabled = false;
+          editedSave.disabled = false;
+        }
+      },
+      { once: true },
+    );
   }
 
   async renderProgressBar() {
     if (this.state.videoId) {
-      if (ProgressBar.find()) {
-        ProgressBar.clearContent();
-      } else {
+      if (!this.progressBarFactory.find()) {
         const $youTubeProgressBar =
           document.body.querySelector('.ytp-progress-bar');
 
         if ($youTubeProgressBar) {
-          const progressBar = new this.ProgressBar();
-          $youTubeProgressBar.append(progressBar.dom);
+          $youTubeProgressBar.append(new this.progressBarFactory().dom);
         } else {
           console.error('[momentify] Cannot find YT progress bar element');
         }
@@ -376,7 +479,11 @@ class ContentRenderer {
         this.services.getVideo({ videoId: this.state.videoId }),
       ]);
 
-      if (bookmarksRes.list && bookmarksRes.list.length > 0) {
+      this.state.video = videoRes.video || null;
+
+      if (bookmarksRes.list && bookmarksRes.list.ids.length > 0) {
+        this.state.bookmarks.byId = new Map(bookmarksRes.list.byId);
+        this.state.bookmarks.ids = bookmarksRes.list.ids;
         const $video = document.body.querySelector('video');
 
         if ($video) {
@@ -384,32 +491,45 @@ class ContentRenderer {
 
           if (Number.isNaN(duration)) {
             duration = await new Promise((resolve) => {
-              $video.addEventListener('loadedmetadata', () => {
-                resolve($video.duration);
-              });
+              $video.addEventListener(
+                'loadedmetadata',
+                () => {
+                  resolve($video.duration);
+                },
+                { once: true },
+              );
             });
           }
 
-          const $marksContainer = ProgressBar.findMarksContainer();
-
-          if ($marksContainer) {
-            const { loopStartId, loopEndId } = videoRes.video;
-
-            bookmarksRes.list.forEach((bm) => {
-              const mark = this.buildBookmark(
-                bm,
-                duration,
-                loopStartId,
-                loopEndId,
+          $video.addEventListener(
+            'loadstart',
+            () => {
+              // Update marks position if video duration changes (this can be
+              // after marks was already rendered)
+              $video.addEventListener(
+                'loadedmetadata',
+                this.adjustMarksOnDurationChange.bind(this),
+                { once: true },
               );
-              if (mark) $marksContainer.append(mark.dom);
-            });
+            },
+            { once: true },
+          );
 
-            if (loopStartId && loopEndId) {
-              this.setupVideoLoop(loopStartId, loopEndId);
-            } else {
-              this.removeVideoLoop();
-            }
+          const marks = this.state.bookmarks.ids.map((bookmarkId) => {
+            return this.buildBookmark(
+              this.state.bookmarks.byId.get(bookmarkId),
+              duration,
+            ).dom;
+          });
+          this.renderNewMarks(...marks);
+
+          const { loopStartId, loopEndId } = videoRes.video;
+          if (loopStartId && loopEndId) {
+            this.setMarkLoopUI(loopStartId);
+            this.setMarkLoopUI(loopEndId);
+            this.setupVideoLoop(loopStartId, loopEndId);
+          } else {
+            this.removeVideoLoop();
           }
         } else {
           console.error('[momentify] Cannot find video element');
@@ -420,7 +540,7 @@ class ContentRenderer {
 
   renderBookmarkEditModal() {
     if (!this.bookmarkModal) {
-      const modal = new this.BookmarkEditModalCreator();
+      const modal = new this.bookmarkEditModalFactory();
       this.bookmarkModal = modal;
       this.bookmarkModal.setMediator(this);
       document.body.append(modal.dom);
@@ -429,25 +549,33 @@ class ContentRenderer {
 
   setupVideoLoop(loopStartId, loopEndId) {
     this.removeVideoLoop();
-    const $startMark = this.Mark.findMark(loopStartId);
-    const $endMark = this.Mark.findMark(loopEndId);
+    const $startMark = this.markFactory.findMark(loopStartId);
+    const $endMark = this.markFactory.findMark(loopEndId);
 
     if ($startMark && $endMark) {
       const $video = document.querySelector('video');
-      const startTime = Number($startMark.dataset.time);
-      const endTime = Number($endMark.dataset.time);
+      const startTime = this.markFactory.getMarkTime($startMark);
+      const endTime = this.markFactory.getMarkTime($endMark);
       this.state.loopStartTime = Math.min(startTime, endTime);
       this.state.loopEndTime = Math.max(startTime, endTime);
 
-      $video.addEventListener('timeupdate', this.boundLoopHandler);
+      if ($video) {
+        $video.addEventListener('timeupdate', this.boundLoopHandler);
+      } else {
+        console.error('[momentify] Cannot find video element');
+      }
     }
   }
 
   removeVideoLoop() {
     const $video = document.querySelector('video');
-    $video.removeEventListener('timeupdate', this.boundLoopHandler);
-    this.state.loopStartTime = 0;
-    this.state.loopEndTime = 0;
+    if ($video) {
+      $video.removeEventListener('timeupdate', this.boundLoopHandler);
+      this.state.loopStartTime = 0;
+      this.state.loopEndTime = 0;
+    } else {
+      console.error('[momentify] Cannot find video element');
+    }
   }
 
   handleLoop(e) {
@@ -458,29 +586,154 @@ class ContentRenderer {
     }
   }
 
-  buildBookmark(bookmark, duration, loopStartId, loopEndId) {
-    if (bookmark.time > duration) return null;
-    const mark = new this.Mark(
-      {
-        bookmark,
-        duration,
-        loopStartId,
-        loopEndId,
-      },
-      { popupsContainerId: this.popupsContainerId },
-    );
+  setMarkLoopUI(bookmarkId, deleteLoop = false) {
+    const { loopStartId, loopEndId } = this.state.video || {};
+    const { tempLoopStartId } = this.state;
+    const $mark = this.markFactory.findMark(bookmarkId);
+    const $loopSign = this.markFactory.findLoopSign(bookmarkId);
+    const $loopButton = this.markPopupFactory.findLoopButton(bookmarkId);
+    const $loopLabel = this.markPopupFactory.findLoopLabel(bookmarkId);
+
+    if (!$mark) return;
+
+    if (bookmarkId === loopStartId || bookmarkId === tempLoopStartId) {
+      $mark.dataset.loop = 'start';
+    } else if (bookmarkId === loopEndId) {
+      $mark.dataset.loop = 'finish';
+    }
+
+    if (deleteLoop) delete $mark.dataset.loop;
+
+    if ($mark.dataset.loop === 'start' || $mark.dataset.loop === 'finish') {
+      if ($mark.dataset.loop === 'start') {
+        $loopLabel.firstElementChild.textContent = 'Loop starts here';
+      } else {
+        $loopLabel.firstElementChild.textContent = 'Loop ends here';
+      }
+
+      $loopButton.dataset.action = '';
+      $loopButton.hidden = true;
+      $loopLabel.hidden = false;
+      $loopSign.style.display = 'block';
+    } else if (tempLoopStartId || loopStartId) {
+      $loopButton.querySelector('span').textContent = 'Set loop end';
+      $loopButton.dataset.action = 'finish';
+      $loopButton.hidden = false;
+      $loopLabel.hidden = true;
+      $loopSign.style.display = 'none';
+    } else {
+      $loopButton.querySelector('span').textContent = 'Set loop start';
+      $loopButton.dataset.action = 'start';
+      $loopButton.hidden = false;
+      $loopLabel.hidden = true;
+      $loopSign.style.display = 'none';
+    }
+  }
+
+  buildBookmark(bookmark, duration) {
+    const mark = new this.markFactory({
+      bookmark,
+      duration,
+    });
     mark.setMediator(this);
+
+    if (bookmark.time > duration) {
+      console.warn(`[momentify] Bookmark exceeds video duration:`, bookmark.id);
+      // 1. It can be adjusted later on loadedmetadata (see
+      //    adjustMarksOnDurationChange), until that, suspend mark
+      // 2. Edge case: new video duration is less then mark time, but at that point new
+      //    video metadata haven't been loaded yet, so we have previous video
+      //    duration (which is > time – false positive). In that case,
+      //    adjustMarksOnDurationChange should still suspend that mark
+      this.markFactory.suspendMark(mark.markDom);
+      this.state.bookmarks.suspended.push(bookmark.id);
+    }
+
+    const popup = new this.markPopupFactory({
+      bookmark,
+      popupsContainerId: ContentRenderer.popupsContainerId,
+    });
+    popup.setMediator(this);
+    document
+      .getElementById(ContentRenderer.popupsContainerId)
+      ?.append(popup.dom);
 
     return mark;
   }
 
   adjustMarksOnDurationChange(e) {
-    const marks = this.Mark.findAllBookmarks();
+    const marks = this.markFactory.findAllBookmarks();
+
     if (marks) {
       marks.forEach(($m) => {
-        $m.style.left = `${this.Mark.getMarkOffset(Number($m.dataset.time), e.target.duration)}%`;
+        const time = this.markFactory.getMarkTime($m);
+        const id = this.markFactory.getBookmarkIdFromDom($m);
+        if (time > e.target.duration) {
+          console.warn(
+            `[momentify] Bookmark was removed, cause it exceeds video duration:`,
+            id,
+          );
+          if (!this.state.bookmarks.suspended.includes(id)) {
+            this.markFactory.suspendMark($m);
+            this.state.bookmarks.suspended.push(id);
+          }
+        } else {
+          // Reactivate suspended mark
+          this.markFactory.activateMark($m);
+          if (this.state.bookmarks.suspended.includes(id)) {
+            this.state.bookmarks.suspended =
+              this.state.bookmarks.suspended.filter((bId) => bId !== id);
+          }
+          $m.style.left = `${this.markFactory.getMarkOffset(time, e.target.duration)}%`;
+        }
       });
     }
+  }
+
+  sortMarks() {
+    this.state.bookmarks.ids = this.state.bookmarks.ids.toSorted(
+      (a, b) =>
+        this.state.bookmarks.byId.get(a).time -
+        this.state.bookmarks.byId.get(b).time,
+    );
+    const marks = Array.from(this.markFactory.findAllBookmarks(true));
+    const sorted = this.state.bookmarks.ids
+      .map((id) =>
+        marks.find(($m) => id === this.markFactory.getBookmarkIdFromDom($m)),
+      )
+      .filter(Boolean);
+    return sorted;
+  }
+
+  reorderRenderedMarks() {
+    const $container = this.progressBarFactory.findMarksContainer();
+    if ($container) $container.replaceChildren(...this.sortMarks());
+    else console.error('[momentify] Cannot find marks container');
+  }
+
+  renderNewMarks(...$marks) {
+    this.progressBarFactory.pushBookmark(...$marks);
+    this.reorderRenderedMarks();
+  }
+
+  clearPopups() {
+    document
+      .getElementById(ContentRenderer.popupsContainerId)
+      ?.replaceChildren();
+  }
+
+  cleanupBookmarksData() {
+    this.state.bookmarks.byId = new Map();
+    this.state.bookmarks.ids = [];
+    this.state.bookmarks.suspended = [];
+    if (this.state.video) {
+      this.state.video.loopStartId = null;
+      this.state.video.loopEndId = null;
+    }
+    this.state.tempLoopStartId = null;
+    this.progressBarFactory.clearContent();
+    this.clearPopups();
+    this.removeVideoLoop();
   }
 }
 
@@ -506,27 +759,17 @@ class BookmarkButton {
   constructor(isQuick = false) {
     this.isQuick = isQuick;
     this.id = BookmarkButton.createDomId(isQuick);
+    // TODO: change or remove color?
     const color = isQuick ? 'red' : 'blue';
     const label = isQuick ? 'Save quick bookmark' : 'Edit and save bookmark';
+    const specialClass = isQuick ? 'ytp-quick-save-btn' : 'ytp-edited-save-btn';
     const $button = createDomElement(`
-        <button id=${this.id} aria-label="${label}" class="momentify-bookmark-btn ytp-button" style="display: flex; align-items: center; justify-content: center; color: ${color}">
+        <button id=${this.id} aria-label="${label}" class="${specialClass} momentify-bookmark-btn ytp-button" style="display: flex; align-items: center; justify-content: center; color: ${color}">
           <svg aria-hidden xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-bookmark-icon lucide-bookmark"><path d="M17 3a2 2 0 0 1 2 2v15a1 1 0 0 1-1.496.868l-4.512-2.578a2 2 0 0 0-1.984 0l-4.512 2.578A1 1 0 0 1 5 20V5a2 2 0 0 1 2-2z"/></svg>
         </button>
       `);
-    const $video = document.querySelector('video');
-    $button.disabled = $video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA;
     $button.addEventListener('click', this.handleSaveBookmark.bind(this));
     this.dom = $button;
-
-    document.querySelector('video').addEventListener(
-      'loadeddata',
-      () => {
-        if ($video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-          $button.disabled = false;
-        }
-      },
-      { once: true },
-    );
   }
 
   setMediator(mediator) {
@@ -595,31 +838,29 @@ class ProgressBar {
     if ($container) $container.replaceChildren();
   }
 
-  static pushBookmark($bookmark) {
-    ProgressBar.findMarksContainer()?.append($bookmark);
+  static pushBookmark(...$bookmarks) {
+    ProgressBar.findMarksContainer()?.append(...$bookmarks);
   }
 }
 
 class Mark {
-  static youtubeVideContainerClassname = '.html5-video-player';
   mediator;
-  popupsContainerId;
-  state = { id: null, bookmark: null };
+  state = { id: null };
 
-  constructor(
-    { bookmark, duration, loopStartId, loopEndId },
-    { popupsContainerId },
-  ) {
-    const { id, time, title, color } = bookmark;
-    this.state = { id, bookmark };
-    this.popupsContainerId = popupsContainerId;
+  static wrapperComponentName = 'mark-wrapper';
+  static markComponentName = 'mark';
+  static loopSignComponentName = 'loop-sign';
+
+  constructor({ bookmark, duration }) {
+    const { id, time, color } = bookmark;
+    this.state = { id };
 
     this.dom = createDomElement(`
-      <div id="${Mark.createMarkWrapperDomId(id)}" data-component="mark-wrapper"></div>
+      <div id="${Mark.createMarkWrapperDomId(id)}" data-id="${id}" data-component="${Mark.wrapperComponentName}"></div>
     `);
 
-    this.mark = createDomElement(`
-      <button id="${Mark.createMarkDomId(id)}" tabindex="0" aria-haspopup="dialog" aria-label="Bookmark" data-time="${time}" data-component="mark" class="momentify-mark" style="
+    this.markDom = createDomElement(`
+      <button id="${Mark.createMarkDomId(id)}" data-id="${id}" tabindex="0" aria-haspopup="dialog" aria-label="Bookmark at ${formatTime(time)}" data-time="${time}" data-component="${Mark.markComponentName}" class="momentify-mark" style="
         position: absolute;
         top: 50%;
         left: ${Mark.getMarkOffset(time, duration)}%;
@@ -635,18 +876,148 @@ class Mark {
       "></button>
     `);
 
-    this.mark.addEventListener(
+    this.markDom.addEventListener(
       'mouseenter',
       this.handleMarkHoverOrClick.bind(this),
     );
-    this.mark.addEventListener('click', this.handleMarkHoverOrClick.bind(this));
+    this.markDom.addEventListener(
+      'click',
+      this.handleMarkHoverOrClick.bind(this),
+    );
 
+    this.loopSignDom = createDomElement(`
+      <div data-component="${Mark.loopSignComponentName}" style="
+        display: none;
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        border: 1px solid lch(100 0 0 / 0.6);
+        background-color: lime;
+        position-anchor: --mark-${id};
+        position: fixed;
+        position-area: block-end;
+        inset-block-start: 1px;
+        z-index: 1000;
+      "></div>
+    `);
+
+    this.dom.append(this.markDom);
+    this.dom.append(this.loopSignDom);
+  }
+
+  static find(bookmarkId) {
+    return document.getElementById(this.createMarkWrapperDomId(bookmarkId));
+  }
+
+  static findMark(bookmarkId) {
+    return document.getElementById(this.createMarkDomId(bookmarkId));
+  }
+
+  static findAllBookmarks(withContainer = false) {
+    return withContainer
+      ? document.querySelectorAll(
+          `[data-component="${Mark.wrapperComponentName}"]`,
+        )
+      : document.querySelectorAll(
+          `[data-component="${Mark.markComponentName}"]`,
+        );
+  }
+
+  static findLoopSign(bookmarkId) {
+    return this.find(bookmarkId)?.querySelector(
+      `[data-component="${Mark.loopSignComponentName}"]`,
+    );
+  }
+
+  static findLoopMarks($container = document) {
+    const $start = $container.querySelector('[data-loop="start"]');
+    const $end = $container.querySelector('[data-loop="finish"]');
+
+    return [$start, $end];
+  }
+
+  static findAllLoopMarks($container = document) {
+    return $container.querySelectorAll('[data-loop]');
+  }
+
+  static createMarkDomId(bookmarkId) {
+    return `momentify-bookmark-${bookmarkId}`;
+  }
+
+  static createMarkWrapperDomId(bookmarkId) {
+    return `momentify-wrapper-bookmark-${bookmarkId}`;
+  }
+
+  static getBookmarkIdFromDom($markOrWrapper) {
+    return $markOrWrapper.dataset.id;
+  }
+
+  static removeMark(bookmarkId) {
+    this.find(bookmarkId)?.remove();
+  }
+
+  static getMarkOffset(time, duration) {
+    return (time / duration) * 100;
+  }
+
+  static getMarkTime($mark) {
+    return Number($mark.dataset.time);
+  }
+
+  static suspendMark($mark) {
+    $mark.style.display = 'none';
+    $mark.dataset.suspended = 'true';
+  }
+
+  static activateMark($mark) {
+    $mark.style.display = 'block';
+    delete $mark.dataset.suspended;
+  }
+
+  setMediator(mediator) {
+    this.mediator = mediator;
+  }
+
+  handleMarkHoverOrClick(e) {
+    this.mediator.notify(this, {
+      type: 'ui/open_bookmark_details',
+      payload: { bookmarkId: this.state.id },
+    });
+  }
+}
+
+class MarkPopup {
+  mediator;
+  popupsContainerId;
+  state = { id: null };
+
+  static ytVideoContainerClassname = '.html5-video-player';
+  static popupComponentName = 'mark-popup';
+
+  constructor({ bookmark, popupsContainerId }) {
+    const { title, id } = bookmark;
+    this.state.id = id;
+    this.popupsContainerId = popupsContainerId;
+
+    // This wrapper is just to reset some inherited styles
+    this.dom = createDomElement(`
+      <div style="
+          font: initial;
+          shadow: initial;
+          position: initial;
+          text-shadow: initial;
+          text-decoration: initial;
+          cursor: initial;
+          margin: initial;
+          padding: initial;
+          background: initial;"></div>
+    `);
     this.popup = createDomElement(`
-      <dialog id="${Mark.createPopupDomId(id)}"
-        data-component="mark-popup"
-        aria-label="Bookmark settings"
+      <dialog id="${MarkPopup.createPopupDomId(this.state.id)}"
+        data-component="${MarkPopup.popupComponentName}"
+        aria-label="Bookmark details"
         class="momentify-mark-popup"
-        style="position-anchor: --mark-${id};"
+        style="position-anchor: --mark-${this.state.id};"
       >
         <div>
           <button aria-label="Close popup" data-action="close" class="momentify-btn momentify-mark-popup__close-btn">
@@ -693,216 +1064,88 @@ class Mark {
       .querySelector('[data-component="loop-btn"]')
       .addEventListener('click', this.handleLoopSet.bind(this));
 
-    this.loopSign = createDomElement(`
-      <div data-component="loop-sign" style="
-        display: none;
-        width: 5px;
-        height: 5px;
-        border-radius: 50%;
-        border: 1px solid lch(100 0 0 / 0.6);
-        background-color: lime;
-        position-anchor: --mark-${id};
-        position: fixed;
-        position-area: block-end;
-        inset-block-start: 1px;
-        z-index: 1000;
-      "></div>
-    `);
-
-    this.dom.append(this.mark);
-    this.dom.append(this.loopSign);
-
-    if (loopStartId === id) {
-      Mark.syncLoopUI(this.mark, this.popup, this.loopSign, 'start');
-    } else if (loopEndId === id) {
-      Mark.syncLoopUI(this.mark, this.popup, this.loopSign, 'finish');
-    } else {
-      Mark.syncLoopUI(this.mark, this.popup, this.loopSign);
-    }
-
-    // This wrapper is just to reset some inherited styles
-    const $popupWrapper = createDomElement(`
-      <div style="
-          font: initial;
-          shadow: initial;
-          position: initial;
-          text-shadow: initial;
-          text-decoration: initial;
-          cursor: initial;
-          margin: initial;
-          padding: initial;
-          background: initial;"></div>
-    `);
-    $popupWrapper.append(this.popup);
-    document.getElementById(this.popupsContainerId)?.append($popupWrapper);
-
     this.boundedHandlePopupClickAway = this.handlePopupClickAway.bind(this);
 
-    this.#setDomState();
-  }
-
-  static find(bookmarkId) {
-    return document.getElementById(this.createMarkWrapperDomId(bookmarkId));
-  }
-
-  static findMark(bookmarkId) {
-    return document.getElementById(this.createMarkDomId(bookmarkId));
-  }
-
-  static findAllBookmarks() {
-    return document.querySelectorAll('[data-component="mark"]');
-  }
-
-  static findPopup(bookmarkId) {
-    return document.getElementById(this.createPopupDomId(bookmarkId));
-  }
-
-  static findLoopMarks($container = document) {
-    const $start = $container.querySelector('[data-loop="start"]');
-    const $end = $container.querySelector('[data-loop="finish"]');
-
-    return [$start, $end];
-  }
-
-  static findAllLoopMarks($container = document) {
-    return $container.querySelectorAll('[data-loop]');
-  }
-
-  static createMarkDomId(bookmarkId) {
-    return `momentify-bookmark-${bookmarkId}`;
-  }
-
-  static createPopupDomId(bookmarkId) {
-    return `momentify-bookmark-popup-${bookmarkId}`;
-  }
-
-  static createMarkWrapperDomId(bookmarkId) {
-    return `momentify-wrapper-bookmark-${bookmarkId}`;
-  }
-
-  static getBookmarkIdFromDom($mark) {
-    return $mark.id.split('momentify-bookmark-')[1];
-  }
-
-  static removeMark(bookmarkId) {
-    this.find(bookmarkId)?.remove();
-    this.findPopup(bookmarkId)?.parentElement.remove();
-  }
-
-  static isInPopup($el) {
-    const $openedPopup = document.querySelector(
-      '[data-component="mark-popup"][open]',
-    );
-    return Boolean(
-      $openedPopup && ($el === $openedPopup || $openedPopup.contains($el)),
-    );
-  }
-
-  static closeAllPopups() {
-    document.querySelectorAll('[data-component="mark-popup"]').forEach(($p) => {
-      $p.close();
+    this.popup.addEventListener('beforetoggle', (e) => {
+      if (e.newState === 'open') {
+        document
+          .querySelector(MarkPopup.ytVideoContainerClassname)
+          ?.addEventListener('click', this.boundedHandlePopupClickAway, {
+            capture: true, // Use capture phase, so that popup opened on the click (e.g. using keyboard) wont be closed immediately
+          });
+      }
     });
-  }
 
-  static getInstance(bookmarkId) {
-    return Mark.find(bookmarkId)?._state?.instance;
-  }
-
-  static getMarkOffset(time, duration) {
-    return (time / duration) * 100;
+    this.dom.append(this.popup);
   }
 
   setMediator(mediator) {
     this.mediator = mediator;
   }
 
-  #setDomState() {
-    this.dom._state = { instance: this };
+  static findPopup(bookmarkId) {
+    return document.getElementById(this.createPopupDomId(bookmarkId));
   }
 
-  syncState({ bookmark }) {
-    this.state = { id: bookmark.id, bookmark };
-    this.mark.style.backgroundColor = bookmark.color;
-    const $popupTitle = this.popup.querySelector(
-      '[data-component="bookmark-title"]',
-    );
-    if ($popupTitle) $popupTitle.textContent = bookmark.title;
-    this.#setDomState();
-  }
-
-  static syncMarkLoopUI($mark, loopPartType) {
-    const { mark, popup, loopSign } = this.getInstance(
-      this.getBookmarkIdFromDom($mark),
-    );
-    Mark.syncLoopUI(mark, popup, loopSign, loopPartType);
-  }
-
-  static syncLoopUI($mark, $popup, $loopSign, loopPartType) {
-    const $loopButton = $popup.querySelector('[data-component="loop-btn"]');
-    const $loopLabel = $popup.querySelector('[data-component="loop-label"]');
-
-    if (loopPartType === 'start' || loopPartType === 'finish') {
-      $mark.dataset.loop = loopPartType;
-    } else {
-      delete $mark.dataset.loop;
-    }
-
-    const $loopMarks = this.findLoopMarks();
-
-    if ($mark.dataset.loop === 'start' || $mark.dataset.loop === 'finish') {
-      if ($mark.dataset.loop === 'start') {
-        $loopLabel.firstElementChild.textContent = 'Loop starts here';
-      } else {
-        $loopLabel.firstElementChild.textContent = 'Loop ends here';
-      }
-
-      $loopButton.dataset.action = '';
-      $loopButton.hidden = true;
-      $loopLabel.hidden = false;
-      $loopSign.style.display = 'block';
-    } else if ($loopMarks[0]) {
-      $loopButton.querySelector('span').textContent = 'Set loop end';
-      $loopButton.dataset.action = 'finish';
-      $loopButton.hidden = false;
-      $loopLabel.hidden = true;
-      $loopSign.style.display = 'none';
-    } else {
-      $loopButton.querySelector('span').textContent = 'Set loop start';
-      $loopButton.dataset.action = 'start';
-      $loopButton.hidden = false;
-      $loopLabel.hidden = true;
-      $loopSign.style.display = 'none';
+  static findPopupTitle(bookmarkId) {
+    const $popup = this.findPopup(bookmarkId);
+    if ($popup) {
+      return $popup.querySelector('[data-component="bookmark-title"]');
     }
   }
 
-  handleMarkHoverOrClick(e) {
-    document.querySelectorAll('[data-component="mark-popup"]').forEach(($p) => {
-      $p.close();
-    });
-    this.popup.show();
+  static findLoopButton(bookmarkId) {
+    return this.findPopup(bookmarkId)?.querySelector(
+      '[data-component="loop-btn"]',
+    );
+  }
+
+  static findLoopLabel(bookmarkId) {
+    return this.findPopup(bookmarkId)?.querySelector(
+      '[data-component="loop-label"]',
+    );
+  }
+
+  static createPopupDomId(bookmarkId) {
+    return `momentify-bookmark-popup-${bookmarkId}`;
+  }
+
+  static removePopup(bookmarkId) {
+    this.findPopup(bookmarkId)?.parentElement.remove();
+  }
+
+  static closeAllPopups() {
     document
-      .querySelector(Mark.youtubeVideContainerClassname)
-      ?.addEventListener('click', this.boundedHandlePopupClickAway, {
-        capture: true,
+      .querySelectorAll(`[data-component="${MarkPopup.popupComponentName}"]`)
+      .forEach(($p) => {
+        $p.close();
       });
-    Mark.syncMarkLoopUI(this.mark, this.mark.dataset.loop);
+  }
+
+  static isInPopup($el) {
+    const $openedPopup = document.querySelector(
+      `[data-component="${MarkPopup.popupComponentName}"][open]`,
+    );
+    return Boolean(
+      $openedPopup && ($el === $openedPopup || $openedPopup.contains($el)),
+    );
+  }
+
+  handlePopupClickAway(e) {
+    if (!MarkPopup.isInPopup(e.target)) {
+      MarkPopup.closeAllPopups();
+      document
+        .querySelector(MarkPopup.ytVideoContainerClassname)
+        ?.removeEventListener('click', this.boundedHandlePopupClickAway, {
+          capture: true,
+        });
+    }
   }
 
   handleClosePopup(e) {
     e.preventDefault();
     e.stopPropagation();
     this.popup.close();
-  }
-
-  handlePopupClickAway(e) {
-    if (!Mark.isInPopup(e.target)) {
-      Mark.closeAllPopups();
-      document
-        .querySelector(Mark.youtubeVideContainerClassname)
-        ?.removeEventListener('click', this.boundedHandlePopupClickAway, {
-          capture: true,
-        });
-    }
   }
 
   handleDeleteBookmark(e) {
@@ -916,38 +1159,33 @@ class Mark {
     this.popup.close();
     this.mediator.notify(this, {
       type: 'ui/open_bookmark_edit_modal',
-      payload: { bookmark: this.state.bookmark },
+      payload: { bookmarkId: this.state.id },
     });
   }
 
   handleLoopSet(e) {
     const action = e.currentTarget.dataset.action;
-
-    if (action === 'start') {
-      Mark.syncMarkLoopUI(this.mark, 'start');
-      return;
-    }
-
-    const $loopMarks = Mark.findLoopMarks();
-
-    if (action === 'finish' && $loopMarks[0]) {
-      this.mediator.notify(this, {
-        type: 'api/save_loop',
-        payload: {
-          loopStartId: Mark.getBookmarkIdFromDom($loopMarks[0]),
-          loopEndId: this.state.id,
-        },
-      });
-    }
+    this.mediator.notify(this, {
+      type: 'ui/manage_loop',
+      payload: {
+        bookmarkId: this.state.id,
+        action,
+      },
+    });
   }
 
   handleLoopDelete() {
     this.mediator.notify(this, {
-      type: 'api/delete_loop',
+      type: 'ui/manage_loop',
+      payload: {
+        bookmarkId: this.state.id,
+        action: 'delete',
+      },
     });
   }
 
   disablePopupTouchEventsLeak() {
+    // Prevent triggering video events after clicking on popup
     [
       'mousedown',
       'mouseenter',
@@ -1149,6 +1387,7 @@ class Services {
     return await chrome.runtime.sendMessage({
       action: 'GET_BOOKMARKS_BY_VIDEO_ID',
       videoId,
+      normalized: true,
     });
   }
 
@@ -1187,19 +1426,21 @@ const contentRenderer = new ContentRenderer({
   BookmarkButton,
   ProgressBar,
   Mark,
+  MarkPopup,
   BookmarkEditModal,
   Services,
 });
 contentRenderer.render();
 
-chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener(async (message) => {
   switch (message.action) {
     case 'CONTENT/SET_VIDEO_LOOP': {
       await contentRenderer.notify(null, {
-        type: 'ui/set_video_loop',
+        type: 'ui/apply_video_loop',
         payload: {
           loopStartId: message.loopStartId,
           loopEndId: message.loopEndId,
+          videoId: message.videoId,
         },
       });
       break;
@@ -1290,7 +1531,7 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       break;
     }
     default:
-      console.warn('Unknown action:', message.action);
+      console.warn('[momentify] Unknown action:', message.action);
   }
 });
 
@@ -1322,4 +1563,18 @@ function getVideoPageUrlParams(url) {
 function createDomElement(html) {
   const dom = new DOMParser().parseFromString(html, 'text/html');
   return dom.body.firstElementChild;
+}
+
+function formatTime(timeInSec) {
+  const seconds = Math.max(0, Math.floor(timeInSec));
+
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+
+  if (h > 0) {
+    return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+
+  return `${m}:${String(s).padStart(2, '0')}`;
 }

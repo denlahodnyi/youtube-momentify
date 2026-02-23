@@ -125,7 +125,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         case 'GET_BOOKMARKS_BY_VIDEO_ID': {
           const bookmarks = await getBookmarksByVideoId(db, message.videoId, {
             normalized: message.normalized,
-            order: message.order,
+            order: message.order, // time_asc | new
           });
           sendResponse({ success: true, list: bookmarks });
           break;
@@ -189,6 +189,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           for (const tab of tabs) {
             chrome.tabs.sendMessage(tab.id, {
               action: 'CONTENT/SET_VIDEO_LOOP',
+              videoId: message.videoId,
               loopStartId: message.loopStartId,
               loopEndId: message.loopEndId,
             });
