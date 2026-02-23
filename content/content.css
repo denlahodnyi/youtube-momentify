@@ -65,13 +65,22 @@
   }
 }
 
+#container:has(.momentify-mark-popup[open]) {
+  /* This workaround forms containing block on the YouTube video container,
+  which creates boundaries for the current opened popup and prevents overflowing
+ this container. Popup will be correctly positioned using anchor positioning fallbacks */
+  transform: translate(0) !important;
+}
 .momentify-mark-popup {
   --d: 0.625rem; /* distance between tooltip and anchor */
   --s: 0.5625rem; /* tail size */
+  --popup-anchor-name: --mark-popup;
   position: fixed;
   inset-block-end: var(--d);
+  position-anchor: var(--anchor);
   position-area: block-start;
   position-try-fallbacks: flip-block;
+  anchor-name: var(--popup-anchor-name);
   z-index: 1000;
   inline-size: 160px;
   margin-top: var(--d);
@@ -83,15 +92,16 @@
   font-family: Arial, Helvetica, sans-serif;
   &::before {
     content: '';
-    position: absolute;
+    position: fixed;
     z-index: -1;
     width: var(--s);
     margin: inherit;
     background: inherit;
-    inset-block-start: calc(-1 * var(--d));
-    inset-block-end: calc(-1 * var(--d));
-    inset-inline-start: 50%;
-    transform: translateX(-50%);
+    /* vertical position from tooltip  */
+    top: calc(anchor(var(--popup-anchor-name) top) - var(--d));
+    bottom: calc(anchor(var(--popup-anchor-name) bottom) - var(--d));
+    /* horizontal position from anchor (using variable from inline style) */
+    left: calc(anchor(var(--anchor) center) - var(--s) / 2);
     clip-path: polygon(
       50% 0.2em,
       100% var(--d),
@@ -112,10 +122,13 @@
 }
 
 .momentify-mark-popup__close-btn {
-  position: absolute;
-  inset-block-start: -8px;
-  inset-inline-end: -8px;
+  position: fixed;
+  inset-block-end: -12px;
+  inset-inline-start: -12px;
   z-index: 1;
+  position-anchor: var(--popup-anchor-name);
+  position-area: block-start inline-end;
+  position-try-fallbacks: flip-inline;
   inline-size: 20px;
   block-size: 20px;
   padding: 2px;

@@ -1017,7 +1017,7 @@ class MarkPopup {
         data-component="${MarkPopup.popupComponentName}"
         aria-label="Bookmark details"
         class="momentify-mark-popup"
-        style="position-anchor: --mark-${this.state.id};"
+        style="--anchor: --mark-${this.state.id};"
       >
         <div>
           <button aria-label="Close popup" data-action="close" class="momentify-btn momentify-mark-popup__close-btn">
