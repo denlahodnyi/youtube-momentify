@@ -23,12 +23,35 @@ export class ValidationError extends Error {
   }
 }
 
+export function validateTag({ title, color }, constrains = {}) {
+  if (constrains.tagTitle.required && !title) {
+    throw new ValidationError('Tag title is required');
+  }
+  if (
+    typeof title === 'string' &&
+    constrains.tagTitle &&
+    (title.length < constrains.tagTitle.min ||
+      title.length > constrains.tagTitle.max)
+  ) {
+    throw new ValidationError(
+      `Tag title must be between ${constrains.tagTitle.min} and ${constrains.tagTitle.max} characters`,
+    );
+  }
+
+  if (constrains.tagColor.required && !color) {
+    throw new ValidationError('Tag color is required');
+  }
+  if (typeof color === 'string' && !validateHex(color)) {
+    throw new ValidationError('Tag color must be a valid hex code');
+  }
+}
+
 export function validateBookmark({ title, color, note = '' }, constrains = {}) {
   if (constrains.bookmarkTitle.required && !title) {
     throw new ValidationError('Bookmark title is required');
   }
   if (
-    typeof bookmarkTitle === 'string' &&
+    typeof title === 'string' &&
     constrains.bookmarkTitle &&
     (title.length < constrains.bookmarkTitle.min ||
       title.length > constrains.bookmarkTitle.max)
@@ -42,7 +65,7 @@ export function validateBookmark({ title, color, note = '' }, constrains = {}) {
     throw new ValidationError('Bookmark title is required');
   }
   if (
-    typeof bookmarkNote === 'string' &&
+    typeof note === 'string' &&
     constrains.bookmarkNote &&
     (note.length < constrains.bookmarkNote.min ||
       note.length > constrains.bookmarkNote.max)
@@ -53,7 +76,7 @@ export function validateBookmark({ title, color, note = '' }, constrains = {}) {
   }
 
   if (constrains.bookmarkColor.required && !color) {
-    throw new ValidationError('Bookmark title is required');
+    throw new ValidationError('Bookmark color is required');
   }
   if (typeof color === 'string' && !validateHex(color)) {
     throw new ValidationError('Bookmark color must be a valid hex code');
@@ -105,6 +128,11 @@ export function validateImportedData(data, latestVersion, constrains = {}) {
     if (!Array.isArray(video.bookmarks)) {
       throw new ValidationError(
         'Invalid video format: "bookmarks" should be an array',
+      );
+    }
+    if (video.tagId && !Array.isArray(video.tagId)) {
+      throw new ValidationError(
+        'Invalid video format: "tagId" should be an array',
       );
     }
     bookmarks.push(...video.bookmarks);
@@ -167,6 +195,31 @@ export function validateImportedData(data, latestVersion, constrains = {}) {
     if (typeof bookmark.createdAt !== 'number') {
       throw new ValidationError(
         'Invalid bookmark format: "createdAt" should be a number',
+      );
+    }
+  }
+
+  for (const tag of data.tags) {
+    if (typeof tag.id !== 'string') {
+      throw new ValidationError('Invalid tag format: "id" should be a string');
+    }
+    if (typeof tag.color !== 'string') {
+      throw new ValidationError(
+        'Invalid tag format: "color" should be a string',
+      );
+    }
+    if (
+      constrains.tagTitle &&
+      (tag.title.length < constrains.tagTitle.min ||
+        tag.title.length > constrains.tagTitle.max)
+    ) {
+      throw new ValidationError(
+        `Tag title length should be between ${constrains.tagTitle.min} and ${constrains.tagTitle.max} characters`,
+      );
+    }
+    if (!validateHex(tag.color)) {
+      throw new ValidationError(
+        'Invalid tag format: "color" should be a valid hex code',
       );
     }
   }

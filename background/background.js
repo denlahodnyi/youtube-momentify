@@ -3,15 +3,18 @@ import {
   getYoutubeVideoTabPattern,
   validateBookmark,
   validateImportedData,
+  validateTag,
   ValidationError,
 } from './backgroundUtils.js';
 
 const DEFAULT_MARK_COLOR = '#FF7F50';
 const BOOKMARKS_BY_VIDEO_ID_IDX = 'bookmarks_idx/by_videoId';
 const VIDEOS_BY_CREATED_AT_IDX = 'videos_idx/by_createdAt';
+const VIDEOS_BY_TAG_IDX = 'videos_idx/by_tag';
 const VIDEO_TITLE_CONSTRAINS = { min: 1, max: 100 };
 const BOOKMARK_TITLE_CONSTRAINS = { min: 1, max: 80 };
 const BOOKMARK_NOTE_CONSTRAINS = { min: 0, max: 200 };
+const TAG_TITLE_CONSTRAINS = { min: 0, max: 25 };
 const DATA_VERSION = 1;
 
 chrome.runtime.onInstalled.addListener((details) => {
@@ -124,6 +127,67 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 : 'Failed to create new bookmark';
             sendResponse({ success: false, error: errorMessage });
           }
+          break;
+        }
+        case 'CREATE_TAG': {
+          try {
+            validateTag(message, {
+              tagTitle: {
+                ...TAG_TITLE_CONSTRAINS,
+                required: true,
+              },
+              tagColor: { required: !!message.color },
+            });
+            const { tag } = await createTag(db, message);
+            sendResponse({ success: true, tag });
+          } catch (err) {
+            const errorMessage =
+              err instanceof ValidationError
+                ? err.message
+                : 'Failed to create new tag';
+            sendResponse({ success: false, error: errorMessage });
+          }
+          break;
+        }
+        case 'UPDATE_TAG': {
+          const { tag: updTag } = message;
+          try {
+            validateTag(updTag, {
+              tagTitle: {
+                ...TAG_TITLE_CONSTRAINS,
+                required: true,
+              },
+              tagColor: { required: !!updTag.color },
+            });
+            const { tag } = await updateTag(db, updTag);
+            sendResponse({ success: true, tag });
+          } catch (err) {
+            const errorMessage =
+              err instanceof ValidationError
+                ? err.message
+                : 'Failed to update tag';
+            sendResponse({ success: false, error: errorMessage });
+          }
+          break;
+        }
+        case 'GET_TAGS': {
+          const tags = await getTags(db, { normalized: message?.normalized });
+          sendResponse({ success: true, list: tags });
+          break;
+        }
+        case 'DELETE_TAG': {
+          await deleteTag(db, message.tagId);
+          sendResponse({ success: true });
+          break;
+        }
+        case 'DELETE_TAGS': {
+          await deleteTags(db);
+          sendResponse({ success: true });
+          break;
+        }
+        case 'SET_VIDEO_TAG': {
+          await setVideoTag(db, message.videoId, message.tagId || null);
+          sendResponse({ success: true });
           break;
         }
         case 'GET_VIDEOS_WITH_BOOKMARKS': {
@@ -294,6 +358,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
         case 'EXPORT_DATA': {
           const videosWithBookmarks = await getVideosWithBookmarks(db);
+          const tags = await getTags(db);
 
           for (const video of videosWithBookmarks) {
             delete video.loopStartId;
@@ -306,6 +371,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               version: DATA_VERSION,
               exportedAt: new Date().toISOString(),
               videos: videosWithBookmarks,
+              tags,
             },
           });
           break;
@@ -375,6 +441,10 @@ function openDatabase() {
         videoObjectStore.createIndex(VIDEOS_BY_CREATED_AT_IDX, 'createdAt', {
           unique: false,
         });
+        videoObjectStore.createIndex(VIDEOS_BY_TAG_IDX, 'tagId', {
+          unique: false,
+          multiEntry: true,
+        });
       }
 
       if (!db.objectStoreNames.contains('bookmarks')) {
@@ -392,6 +462,10 @@ function openDatabase() {
             unique: true,
           },
         );
+      }
+
+      if (!db.objectStoreNames.contains('tags')) {
+        db.createObjectStore('tags', { keyPath: 'id' });
       }
     };
 
@@ -413,6 +487,161 @@ function openDatabase() {
 
       resolve(db);
     };
+  });
+}
+
+function getTags(db, { normalized = false } = {}) {
+  return new Promise((resolve, reject) => {
+    const t = db.transaction(['tags'], 'readonly');
+    let result = normalized ? { byId: [], ids: [] } : [];
+
+    t.oncomplete = () => {
+      resolve(result);
+    };
+    t.onabort = () => {
+      reject(t.error);
+    };
+
+    t.objectStore('tags').openCursor().onsuccess = (e) => {
+      const cursor = e.target.result;
+      if (cursor) {
+        if (normalized) {
+          result.byId.push([cursor.key, cursor.value]);
+          result.ids.push(cursor.value);
+        } else {
+          result.push(cursor.value);
+        }
+        cursor.continue();
+      }
+    };
+  });
+}
+
+function createTag(db, payload) {
+  return new Promise((resolve, reject) => {
+    const t = db.transaction(['tags'], 'readwrite');
+    let tag;
+
+    t.oncomplete = () => {
+      resolve({ tag });
+    };
+
+    t.onabort = () => {
+      reject(t.error);
+    };
+
+    t.objectStore('tags').add({
+      id: crypto.randomUUID(),
+      title: payload.title,
+      color: payload.color,
+    }).onsuccess = (e) => {
+      t.objectStore('tags').get(e.target.result).onsuccess = (ev) => {
+        tag = ev.target.result;
+      };
+    };
+  });
+}
+
+function updateTag(db, tag) {
+  return new Promise((resolve, reject) => {
+    const t = db.transaction(['tags'], 'readwrite');
+    const tagStore = t.objectStore('tags');
+    const req = tagStore.put(tag);
+
+    req.onsuccess = () => {
+      tagStore.get(req.result).onsuccess = (e) => {
+        resolve({ tag: e.target.result });
+      };
+    };
+
+    req.onerror = () => {
+      reject(req.error);
+    };
+  });
+}
+
+function deleteTag(db, tagId) {
+  return new Promise((resolve, reject) => {
+    const t = db.transaction(['tags', 'videos'], 'readwrite');
+    const videoStore = t.objectStore('videos');
+    const tagStore = t.objectStore('tags');
+
+    t.oncomplete = () => {
+      resolve();
+    };
+
+    t.onabort = () => {
+      reject(t.error);
+    };
+
+    tagStore.delete(tagId).onsuccess = () => {
+      videoStore
+        .index(VIDEOS_BY_TAG_IDX)
+        .openCursor(IDBKeyRange.only(tagId)).onsuccess = (event) => {
+        const cursor = event.target.result;
+        if (cursor) {
+          cursor.update({ ...cursor.value, tagId: null });
+          cursor.continue();
+        }
+      };
+    };
+  });
+}
+
+function deleteTags(db) {
+  return new Promise((resolve, reject) => {
+    const t = db.transaction(['tags', 'videos'], 'readwrite');
+    const videoStore = t.objectStore('videos');
+    const tagStore = t.objectStore('tags');
+
+    t.oncomplete = () => {
+      resolve();
+    };
+
+    t.onabort = () => {
+      reject(t.error);
+    };
+
+    tagStore.openCursor().onsuccess = (e) => {
+      const cursor = e.target.result;
+      if (cursor) {
+        videoStore
+          .index(VIDEOS_BY_TAG_IDX)
+          .openCursor(IDBKeyRange.only(cursor.key)).onsuccess = (e) => {
+          const vidCursor = e.target.result;
+          if (vidCursor) {
+            vidCursor.update({ ...vidCursor.value, tagId: null });
+            vidCursor.continue();
+          }
+        };
+
+        cursor.delete();
+        cursor.continue();
+      }
+    };
+  });
+}
+
+function setVideoTag(db, tagId) {
+  return new Promise((resolve, reject) => {
+    const t = db.transaction(['videos'], 'readwrite');
+    const videoStore = t.objectStore('videos');
+
+    t.oncomplete = () => {
+      resolve();
+    };
+
+    t.onabort = () => {
+      reject(t.error);
+    };
+
+    videoStore.get(videoId).onsuccess((e) => {
+      const video = e.target.result;
+      if (video) {
+        video.tagId = [tagId];
+        videoStore.put(video);
+      }
+    });
   });
 }
 
@@ -452,6 +681,7 @@ function createBookmark(db, payload) {
         videoStore.add({
           videoId: payload.videoId,
           title: payload.videoTitle,
+          tagId: null,
           loopStartId: null,
           loopEndId: null,
           createdAt: new Date().getTime(),
@@ -816,7 +1046,7 @@ function deleteVideo(db, videoId) {
 
 function resetData(db) {
   return new Promise((resolve, reject) => {
-    const t = db.transaction(['videos', 'bookmarks'], 'readwrite');
+    const t = db.transaction(['videos', 'bookmarks', 'tags'], 'readwrite');
     const videoIds = [];
 
     t.oncomplete = () => {
@@ -831,6 +1061,7 @@ function resetData(db) {
       videoIds.push(...e.target.result);
       t.objectStore('videos').clear();
       t.objectStore('bookmarks').clear();
+      t.objectStore('tags').clear();
     };
   });
 }
@@ -849,6 +1080,7 @@ function importData(db, data) {
 
     const videoStore = t.objectStore('videos');
     const bmStore = t.objectStore('bookmarks');
+    const tagStore = t.objectStore('tags');
 
     for (const video of data.videos) {
       videoStore.put({
@@ -857,6 +1089,7 @@ function importData(db, data) {
         createdAt: video.createdAt,
         loopStartId: null,
         loopEndId: null,
+        tagId: video.tagId ?? [],
       }).onsuccess = (e) => {
         const videoId = e.target.result;
 
@@ -872,6 +1105,14 @@ function importData(db, data) {
           });
         }
       };
+    }
+
+    for (const tag of data.tags) {
+      tagStore.put({
+        id: tag.id,
+        title: tag.title,
+        color: tag.color,
+      });
     }
   });
 }
