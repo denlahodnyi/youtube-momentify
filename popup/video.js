@@ -55,7 +55,7 @@ export default class Video {
   async handleBookmarksDelete() {
     const result = await this.services.deleteVideoBookmarks(this.videoId);
     if (result.success) {
-      this.setBookmarksCount(0);
+      Video.setBookmarksCount(this.videoId, 0);
       this.dom
         .querySelector('[data-component="bookmarks-list"]')
         .replaceChildren();
