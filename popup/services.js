@@ -37,6 +37,42 @@ export default class Services {
     });
   }
 
+  static async getTags() {
+    return chrome.runtime.sendMessage({
+      action: 'GET_TAGS',
+      normalized: true,
+    });
+  }
+
+  static async createTag(tag) {
+    return chrome.runtime.sendMessage({
+      action: 'CREATE_TAG',
+      tag,
+    });
+  }
+
+  static async updateTag(tag) {
+    return chrome.runtime.sendMessage({
+      action: 'UPDATE_TAG',
+      tag,
+    });
+  }
+
+  static async deleteTag(tagId) {
+    return chrome.runtime.sendMessage({
+      action: 'DELETE_TAG',
+      tagId,
+    });
+  }
+
+  static async setTag(videoId, tagId) {
+    return chrome.runtime.sendMessage({
+      action: 'SET_VIDEO_TAG',
+      videoId,
+      tagId,
+    });
+  }
+
   static async updateBookmark(bookmark) {
     return chrome.runtime.sendMessage({
       action: 'UPDATE_BOOKMARK',

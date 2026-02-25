@@ -1,17 +1,36 @@
 export default class SettingsPage {
   services;
   onNavigate;
+  state = {
+    settings: {
+      showEditedSave: false,
+      showQuickSave: false,
+    },
+    settingsEarlyRequest: null,
+  };
 
   constructor({ Services }) {
     this.services = Services;
+    this.state.settingsEarlyRequest = this.fetchSettings();
   }
 
   render($container) {
     this.renderPageLayout($container);
-    this.renderContentSettings();
+    (this.state.settingsEarlyRequest ?? this.fetchSettings()).then(() => {
+      this.state.settingsEarlyRequest = null;
+      this.renderContentSettings();
+    });
     this.renderImportExport();
     this.renderShortcutsSection();
     this.renderResetDataSection();
+  }
+
+  async fetchSettings() {
+    const settings = await chrome.storage.local.get([
+      'showEditedSave',
+      'showQuickSave',
+    ]);
+    this.state.settings = settings;
   }
 
   renderPageLayout($container) {
@@ -23,10 +42,7 @@ export default class SettingsPage {
   }
 
   async renderContentSettings() {
-    const settings = await chrome.storage.local.get([
-      'showEditedSave',
-      'showQuickSave',
-    ]);
+    const { showEditedSave, showQuickSave } = this.state.settings;
     const $form = document.getElementById('content-settings-form');
     const $quickSaveInput = document.getElementById('quick-save-input');
     const $quickSaveSwitch = document.getElementById('quick-save-switch');
@@ -34,8 +50,8 @@ export default class SettingsPage {
     const $editedSaveSwitch = document.getElementById('edited-save-switch');
 
     if ($quickSaveSwitch && $quickSaveInput) {
-      $quickSaveSwitch.ariaChecked = settings.showEditedSave;
-      $quickSaveInput.checked = settings.showQuickSave;
+      $quickSaveSwitch.ariaChecked = showQuickSave;
+      $quickSaveInput.checked = showQuickSave;
       $quickSaveSwitch.addEventListener('click', (e) => {
         $quickSaveSwitch.setAttribute(
           'aria-checked',
@@ -49,8 +65,8 @@ export default class SettingsPage {
       });
     }
     if ($editedSaveSwitch && $editedSaveInput) {
-      $editedSaveSwitch.ariaChecked = settings.showEditedSave;
-      $editedSaveInput.checked = settings.showEditedSave;
+      $editedSaveSwitch.ariaChecked = showEditedSave;
+      $editedSaveInput.checked = showEditedSave;
       $editedSaveSwitch.addEventListener('click', (e) => {
         $editedSaveSwitch.setAttribute(
           'aria-checked',

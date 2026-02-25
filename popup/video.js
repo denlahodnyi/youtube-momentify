@@ -5,6 +5,7 @@ export default class Video {
   services;
   videoId;
   onVideoDelete;
+  onTagDelete;
 
   constructor({ video, currentVideoId, services }) {
     const { videoId, title } = video;
@@ -24,6 +25,9 @@ export default class Video {
         getVideoThumbnailUrl(videoId);
       this.dom.querySelector('[data-component="video-title"]').textContent =
         title;
+      this.dom.querySelector(
+        '[data-component="video-tag-select"]',
+      ).dataset.videoId = videoId;
 
       this.bindHandleVideoDelete = this.handleVideoDelete.bind(this);
       this.bindBookmarksDelete = this.handleBookmarksDelete.bind(this);
@@ -38,6 +42,17 @@ export default class Video {
       this.dom
         .querySelector('[data-component="bookmarks-sorter"]')
         .addEventListener('change', this.bindBookmarksSort);
+      this.dom
+        .querySelector('[data-component="bookmarks-sorter"]')
+        .addEventListener('change', this.bindBookmarksSort);
+      this.dom
+        .querySelector('[data-component="video-tag-del-button"]')
+        .addEventListener('click', async (e) => {
+          const result = await this.services.setTag(this.videoId, null);
+          if (result.success) {
+            this.onTagDelete?.();
+          }
+        });
     } else {
       throw new Error('No video template found');
     }
@@ -116,6 +131,10 @@ export default class Video {
     this.dom.remove();
   }
 
+  static getVideoIdFromDom($video) {
+    return $video?.id.split('video-item-')[1];
+  }
+
   static getDomId(videoId) {
     return `video-item-${videoId}`;
   }
@@ -126,5 +145,9 @@ export default class Video {
 
   static find(videoId) {
     return document.getElementById(Video.getDomId(videoId));
+  }
+
+  static findAll() {
+    return document.querySelectorAll('[data-component="video-container"]');
   }
 }

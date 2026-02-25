@@ -3,7 +3,6 @@
 
 @layer elements {
   button {
-    all: unset;
     cursor: pointer;
   }
 
@@ -107,9 +106,9 @@ body {
   transition: rotate 0.2s ease-in-out;
 }
 .video-container {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto 1fr;
 }
 .video__header {
   display: flex;

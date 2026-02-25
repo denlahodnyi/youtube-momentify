@@ -14,7 +14,7 @@ const VIDEOS_BY_TAG_IDX = 'videos_idx/by_tag';
 const VIDEO_TITLE_CONSTRAINS = { min: 1, max: 100 };
 const BOOKMARK_TITLE_CONSTRAINS = { min: 1, max: 80 };
 const BOOKMARK_NOTE_CONSTRAINS = { min: 0, max: 200 };
-const TAG_TITLE_CONSTRAINS = { min: 0, max: 25 };
+const TAG_TITLE_CONSTRAINS = { min: 1, max: 20 };
 const DATA_VERSION = 1;
 
 chrome.runtime.onInstalled.addListener((details) => {
@@ -131,14 +131,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
         case 'CREATE_TAG': {
           try {
-            validateTag(message, {
+            validateTag(message.tag, {
               tagTitle: {
                 ...TAG_TITLE_CONSTRAINS,
                 required: true,
               },
-              tagColor: { required: !!message.color },
+              tagColor: { required: !!message.tag.color },
             });
-            const { tag } = await createTag(db, message);
+            const { tag } = await createTag(db, message.tag);
             sendResponse({ success: true, tag });
           } catch (err) {
             const errorMessage =
@@ -382,6 +382,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               videoTitle: VIDEO_TITLE_CONSTRAINS,
               bookmarkTitle: BOOKMARK_TITLE_CONSTRAINS,
               bookmarkNote: BOOKMARK_NOTE_CONSTRAINS,
+              tagTitle: TAG_TITLE_CONSTRAINS,
             });
             await importData(db, message.data);
             const videoIds = message.data.videos.map((v) => v.videoId);
@@ -397,12 +398,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
             sendResponse({ success: true });
           } catch (error) {
+            console.error(error);
             const errorMessage =
               error instanceof ValidationError
                 ? error.message
                 : 'Failed to import data';
             sendResponse({ success: false, error: errorMessage });
           }
+
+          break;
         }
         default:
           console.warn('Unknown action:', message.action);
@@ -507,7 +511,7 @@ function getTags(db, { normalized = false } = {}) {
       if (cursor) {
         if (normalized) {
           result.byId.push([cursor.key, cursor.value]);
-          result.ids.push(cursor.value);
+          result.ids.push(cursor.key);
         } else {
           result.push(cursor.value);
         }
@@ -533,7 +537,7 @@ function createTag(db, payload) {
     t.objectStore('tags').add({
       id: crypto.randomUUID(),
       title: payload.title,
-      color: payload.color,
+      color: payload.color || null,
     }).onsuccess = (e) => {
       t.objectStore('tags').get(e.target.result).onsuccess = (ev) => {
         tag = ev.target.result;
@@ -580,7 +584,7 @@ function deleteTag(db, tagId) {
         .openCursor(IDBKeyRange.only(tagId)).onsuccess = (event) => {
         const cursor = event.target.result;
         if (cursor) {
-          cursor.update({ ...cursor.value, tagId: null });
+          cursor.update({ ...cursor.value, tagId: [] });
           cursor.continue();
         }
       };
@@ -610,7 +614,7 @@ function deleteTags(db) {
           .openCursor(IDBKeyRange.only(cursor.key)).onsuccess = (e) => {
           const vidCursor = e.target.result;
           if (vidCursor) {
-            vidCursor.update({ ...vidCursor.value, tagId: null });
+            vidCursor.update({ ...vidCursor.value, tagId: [] });
             vidCursor.continue();
           }
         };
@@ -622,7 +626,7 @@ function deleteTags(db) {
   });
 }
 
-function setVideoTag(db, tagId) {
+function setVideoTag(db, videoId, tagId) {
   return new Promise((resolve, reject) => {
     const t = db.transaction(['videos'], 'readwrite');
     const videoStore = t.objectStore('videos');
@@ -635,13 +639,13 @@ function setVideoTag(db, tagId) {
       reject(t.error);
     };
 
-    videoStore.get(videoId).onsuccess((e) => {
+    videoStore.get(videoId).onsuccess = (e) => {
       const video = e.target.result;
       if (video) {
-        video.tagId = [tagId];
+        video.tagId = tagId ? [tagId] : [];
         videoStore.put(video);
       }
-    });
+    };
   });
 }
 
@@ -681,7 +685,7 @@ function createBookmark(db, payload) {
         videoStore.add({
           videoId: payload.videoId,
           title: payload.videoTitle,
-          tagId: null,
+          tagId: [],
           loopStartId: null,
           loopEndId: null,
           createdAt: new Date().getTime(),
@@ -1068,7 +1072,7 @@ function resetData(db) {
 
 function importData(db, data) {
   return new Promise((resolve, reject) => {
-    const t = db.transaction(['videos', 'bookmarks'], 'readwrite');
+    const t = db.transaction(['videos', 'bookmarks', 'tags'], 'readwrite');
 
     t.oncomplete = () => {
       resolve();
@@ -1107,12 +1111,14 @@ function importData(db, data) {
       };
     }
 
-    for (const tag of data.tags) {
-      tagStore.put({
-        id: tag.id,
-        title: tag.title,
-        color: tag.color,
-      });
+    if (data.tags) {
+      for (const tag of data.tags) {
+        tagStore.put({
+          id: tag.id,
+          title: tag.title,
+          color: tag.color,
+        });
+      }
     }
   });
 }

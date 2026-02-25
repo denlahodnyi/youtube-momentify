@@ -199,28 +199,37 @@ export function validateImportedData(data, latestVersion, constrains = {}) {
     }
   }
 
-  for (const tag of data.tags) {
-    if (typeof tag.id !== 'string') {
-      throw new ValidationError('Invalid tag format: "id" should be a string');
-    }
-    if (typeof tag.color !== 'string') {
+  if (data.tags) {
+    if (!Array.isArray(data.tags)) {
       throw new ValidationError(
-        'Invalid tag format: "color" should be a string',
+        'Invalid data format: "tags field should be an array',
       );
     }
-    if (
-      constrains.tagTitle &&
-      (tag.title.length < constrains.tagTitle.min ||
-        tag.title.length > constrains.tagTitle.max)
-    ) {
-      throw new ValidationError(
-        `Tag title length should be between ${constrains.tagTitle.min} and ${constrains.tagTitle.max} characters`,
-      );
-    }
-    if (!validateHex(tag.color)) {
-      throw new ValidationError(
-        'Invalid tag format: "color" should be a valid hex code',
-      );
+    for (const tag of data.tags) {
+      if (typeof tag.id !== 'string') {
+        throw new ValidationError(
+          'Invalid tag format: "id" should be a string',
+        );
+      }
+      if (
+        constrains.tagTitle &&
+        (tag.title.length < constrains.tagTitle.min ||
+          tag.title.length > constrains.tagTitle.max)
+      ) {
+        throw new ValidationError(
+          `Tag title length should be between ${constrains.tagTitle.min} and ${constrains.tagTitle.max} characters`,
+        );
+      }
+      if (tag.color && typeof tag.color !== 'string') {
+        throw new ValidationError(
+          'Invalid tag format: "color" should be a string',
+        );
+      }
+      if (tag.color && !validateHex(tag.color)) {
+        throw new ValidationError(
+          'Invalid tag format: "color" should be a valid hex code',
+        );
+      }
     }
   }
 }

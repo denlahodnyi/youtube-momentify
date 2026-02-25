@@ -6,6 +6,7 @@ import Bookmark from './bookmark.js';
 import Video from './video.js';
 import { setupColorPicker } from './colorPicker.js';
 
+// TODO: fix data reset
 const $root = document.getElementById('root');
 const videoId = await getVideoId();
 const homePage = new HomePage({ videoId }, { Services, Bookmark, Video });

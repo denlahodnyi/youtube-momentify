@@ -28,6 +28,7 @@
         >
           <span data-component="color-picker-item-name" class="scr-only"></span>
           <input
+            role="menuitemradio"
             type="radio"
             name="color"
             value=""
@@ -38,8 +39,96 @@
       </template>
     </div>
 
+    <dialog id="tag-picker" popover="auto">
+      <form id="tag-picker-form">
+        <input
+          id="tag-picker-input"
+          aria-label="New tag name"
+          type="text"
+          name="tag"
+          required
+          minlength=""
+          maxlength=""
+          placeholder="New tag name"
+        />
+      </form>
+      <div role="menu" id="tag-picker-list"></div>
+      <template id="tag-item-template">
+        <div role="group" data-component="tag-picker-item" data-tag-root="">
+          <button
+            role="menuitem"
+            data-component="tag-picker-item-select"
+            data-tag-id=""
+            data-tag-picker-action
+            data-tag-color
+          >
+            <svg
+              aria-hidden
+              xmlns="http://www.w3.org/2000/svg"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path
+                d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"
+              />
+              <path d="M2 10h20" />
+            </svg>
+            <span data-component="tag-picker-item-title" data-tag-title></span>
+          </button>
+          <button
+            role="menuitem"
+            data-component="tag-picker-item-edit"
+            popovertarget="tag-picker-edit"
+            popovertargetaction="toggle"
+            data-tag-id=""
+          >
+            edit
+          </button>
+        </div>
+      </template>
+    </dialog>
+
+    <dialog id="tag-picker-edit" popover="auto">
+      <form id="tag-picker-edit-form">
+        <input
+          id="tag-picker-edit-input"
+          aria-label="Change tag name"
+          type="text"
+          name="tag"
+          required
+          minlength=""
+          maxlength=""
+          placeholder="Change tag name"
+        />
+      </form>
+      <button id="tag-picker-edit-delete">Delete</button>
+      <form id="tag-picker-edit-colors" role="menu"></form>
+      <template id="tag-picker-color-item-template">
+        <label
+          data-component="tag-color-picker-item-label"
+          class="tag-color-picker__color-option"
+        >
+          <span data-component="tag-picker-color-name"></span>
+          <input
+            role="menuitemradio"
+            type="radio"
+            name="color"
+            value=""
+            class="scr-only"
+            data-component="tag-picker-color-item-input"
+          />
+        </label>
+      </template>
+    </dialog>
+
     <template id="home-template">
-      <div class="page__header">
+      <div id="page-header" class="page__header">
         <form action="" id="search" class="search">
           <input
             type="search"
@@ -47,6 +136,14 @@
             aria-label="Search by video title"
           />
         </form>
+        <button
+          id="tag-filter-trigger"
+          popovertarget="tag-picker"
+          popovertargetaction="toggle"
+          data-action="select-filter-tag"
+        >
+          Filter by tag
+        </button>
         <button
           id="settings-link"
           aria-label="Navigate to settings"
@@ -75,6 +172,19 @@
         <p>Total saved videos: <span id="videos-count">0</span></p>
         <div id="videos-list" class="videos__list"></div>
       </div>
+      <template id="selected-filter-tag">
+        <div
+          data-component="selected-filter-tag"
+          data-tag-root=""
+          data-tag-color
+        >
+          <span
+            data-component="selected-filter-tag-title"
+            data-tag-title
+          ></span>
+          <button data-component="selected-filter-tag-del-button">x</button>
+        </div>
+      </template>
     </template>
 
     <template id="settings-template">
@@ -197,6 +307,40 @@
 
     <template id="video-template">
       <div data-component="video-container" class="video-container">
+        <div data-component="video-tag" data-tag-root="" data-tag-color>
+          <button
+            data-component="video-tag-select"
+            popovertarget="tag-picker"
+            popovertargetaction="toggle"
+            data-action="select-video-tag"
+            data-video-id=""
+          >
+            <span data-component="video-tag-title" data-tag-title></span>
+          </button>
+          <button hidden data-component="video-tag-del-button">x</button>
+        </div>
+        <button
+          aria-label="Delete video"
+          data-component="delete-video-btn"
+          class="video-container__action"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="lucide lucide-trash-icon lucide-trash"
+          >
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+            <path d="M3 6h18" />
+            <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+          </svg>
+        </button>
         <details data-component="video" class="video">
           <summary data-component="video-header" class="video__header">
             <svg
@@ -214,13 +358,17 @@
             >
               <path d="m9 18 6-6-6-6" />
             </svg>
-            <img
-              data-component="thumbnail"
-              class="video__thumbnail"
-              src=""
-              alt=""
-            />
-            <h2 data-component="video-title" class="video__title"></h2>
+            <div>
+              <div style="display: flex">
+                <img
+                  data-component="thumbnail"
+                  class="video__thumbnail"
+                  src=""
+                  alt=""
+                />
+                <h2 data-component="video-title" class="video__title"></h2>
+              </div>
+            </div>
           </summary>
           <div>
             <p>Count: <span data-component="bookmarks-count">0</span></p>
@@ -277,28 +425,6 @@
             There are no bookmarks yet
           </p>
         </details>
-        <button
-          aria-label="Delete video"
-          data-component="delete-video-btn"
-          class="video-container__action"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            class="lucide lucide-trash-icon lucide-trash"
-          >
-            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
-            <path d="M3 6h18" />
-            <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-          </svg>
-        </button>
       </div>
     </template>
 

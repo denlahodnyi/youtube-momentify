@@ -1,3 +1,14 @@
+export const colors = {
+  DarkCyan: '#008b8b'.toLowerCase(),
+  DeepSkyBlue: '#00bfff'.toLowerCase(),
+  MediumSlateBlue: '#7b68ee'.toLowerCase(),
+  LightGreen: '#90ee90'.toLowerCase(),
+  Coral: '#ff7f50'.toLowerCase(),
+  NavajoWhite: '#FFDEAD'.toLowerCase(),
+  Violet: '#ee82ee'.toLowerCase(),
+  Yellow: '#FFFF00'.toLowerCase(),
+};
+
 export function formatTime(timeInSec) {
   const seconds = Math.max(0, Math.floor(timeInSec));
 

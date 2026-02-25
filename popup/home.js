@@ -1,7 +1,11 @@
+import { colors } from './popupUtils.js';
+
+const TAG_TITLE_CONSTRAINS = { min: 1, max: 20 };
+
 export default class HomePage {
   services;
-  Bookmark;
-  Video;
+  bookmarkFactory;
+  videoFactory;
   onNavigate;
   state = {
     videoId: null,
@@ -9,29 +13,38 @@ export default class HomePage {
     colorPickerBookmarkId: null,
     videos: { byId: new Map(), ids: [] },
     bookmarks: { byId: new Map(), ids: [] },
+    tags: { byId: new Map(), ids: [] },
     videoBookmarks: new Map(), // videoId -> bookmarkId[]
     boundBookmarksRenderHandlers: new Map(),
     filteredVideos: null, // null | videoId[]
-    renderedVideosCount: 0,
+    renderedVideosCount: 0, // pagination offset
     videosPerPage: 30,
+    selectedTagId: null,
+    videosEarlyRequest: null,
+    tagsEarlyRequest: null,
   };
+
+  static defaultTagLabel = 'Tag';
 
   constructor({ videoId, handleNavToSettings }, { Services, Bookmark, Video }) {
     this.services = Services;
-    this.Bookmark = Bookmark;
-    this.Video = Video;
+    this.bookmarkFactory = Bookmark;
+    this.videoFactory = Video;
     this.state.videoId = videoId;
     this.handleNavToSettings = handleNavToSettings;
-    this.attachColorPickerListeners();
+    this.state.videosEarlyRequest = this.fetchVideosData();
+    this.state.tagsEarlyRequest = this.fetchTags();
+
+    this.prepareColorPicker();
+    this.prepareTagPicker();
+    this.prepareTagEditPopover();
   }
 
   async fetchVideosData() {
-    if (!this.state.videos.byId.size) {
-      const result = await this.services.getVideos(this.state.videoId);
-      if (result.success) {
-        this.state.videos.byId = new Map(result.list.byId);
-        this.state.videos.ids = result.list.ids;
-      }
+    const result = await this.services.getVideos(this.state.videoId);
+    if (result.success) {
+      this.state.videos.byId = new Map(result.list.byId);
+      this.state.videos.ids = result.list.ids;
     }
   }
 
@@ -49,20 +62,36 @@ export default class HomePage {
     }
   }
 
+  async fetchTags() {
+    const result = await this.services.getTags();
+    if (result.success) {
+      this.state.tags.byId = new Map(result.list.byId);
+      this.state.tags.ids = result.list.ids;
+    }
+  }
+
   render($container) {
     this.state.renderedVideosCount = 0;
     this.state.filteredVideos = null;
+    this.state.selectedTagId = null;
     this.renderPageLayout($container);
-    this.fetchVideosData().then(() => {
+    Promise.all([
+      this.state.videosEarlyRequest ?? this.fetchVideosData(),
+      this.state.tagsEarlyRequest ?? this.fetchTags(),
+    ]).then(() => {
+      this.state.videosEarlyRequest = null;
+      this.state.tagsEarlyRequest = null;
       this.renderVideos();
+      this.renderPickerTags();
       this.attachLoadMoreVideos();
       this.attachSearch();
     });
   }
 
   renderPageLayout($container) {
-    const $tmpl = document.getElementById('home-template');
-    $container.append($tmpl.content.cloneNode(true));
+    $container.append(
+      document.getElementById('home-template').content.cloneNode(true),
+    );
     document.getElementById('settings-link').addEventListener('click', () => {
       this.onNavigate?.();
     });
@@ -83,7 +112,7 @@ export default class HomePage {
       ids.forEach((videoId, i) => {
         const video = this.state.videos.byId.get(videoId);
 
-        const createdVideo = new this.Video({
+        const createdVideo = new this.videoFactory({
           video,
           currentVideoId: this.state.videoId,
           services: this.services,
@@ -95,6 +124,25 @@ export default class HomePage {
             this.renderEmptyVideosMessage();
           }
         };
+        createdVideo.onTagDelete = () => {
+          this.state.videos.byId.set(videoId, {
+            ...this.state.videos.byId.get(videoId),
+            tagId: [],
+          });
+          if (this.state.selectedTagId) {
+            this.videoFactory.find(videoId)?.remove();
+          } else {
+            this.setVideoTag(videoId, null);
+          }
+        };
+
+        if (video.tagId && video.tagId[0]) {
+          this.setVideoTag(createdVideo.dom, video.tagId[0]);
+        } else {
+          createdVideo.dom.querySelector('[data-tag-title]').textContent =
+            HomePage.defaultTagLabel;
+        }
+
         const $videoItem = createdVideo.dom;
 
         if ($videoItem) {
@@ -127,8 +175,15 @@ export default class HomePage {
     }
   }
 
+  refreshVideos() {
+    this.findVideosList()?.replaceChildren();
+    this.renderVideos();
+  }
+
   renderBookmarksOnIntent(videoId, e) {
-    const $videoItem = document.getElementById(this.Video.getDomId(videoId));
+    const $videoItem = document.getElementById(
+      this.videoFactory.getDomId(videoId),
+    );
     const $details = $videoItem.querySelector('details');
 
     if (e.type === 'mouseenter') {
@@ -200,11 +255,11 @@ export default class HomePage {
     const ids = this.state.videoBookmarks.get(videoId);
 
     if (ids.length) {
-      this.Video.setBookmarksCount(videoId, ids.length);
+      this.videoFactory.setBookmarksCount(videoId, ids.length);
 
       for (const bookmarkId of ids) {
         const bookmark = this.state.bookmarks.byId.get(bookmarkId);
-        const createdBookmark = new this.Bookmark({
+        const createdBookmark = new this.bookmarkFactory({
           getBookmark: () => this.state.bookmarks.byId.get(bookmarkId),
           services: this.services,
         });
@@ -212,7 +267,7 @@ export default class HomePage {
           this.state.bookmarks.byId.set(updatedBookmark.id, updatedBookmark);
         };
         createdBookmark.onBookmarkDelete = async () => {
-          this.Video.removeBookmark(bookmark.id);
+          this.videoFactory.removeBookmark(bookmark.id);
           this.removeBookmark(bookmark.id);
           createdBookmark.setBookmarksCount(
             this.state.videoBookmarks.get(videoId)?.length || 0,
@@ -222,12 +277,290 @@ export default class HomePage {
           this.state.$colorPickerInvoker = $invoker;
           this.state.colorPickerBookmarkId = bookmarkId;
         };
-        this.Video.pushBookmark(videoId, bookmark, createdBookmark.dom);
+        this.videoFactory.pushBookmark(videoId, bookmark, createdBookmark.dom);
       }
     }
   }
 
-  attachColorPickerListeners() {
+  renderPickerTags() {
+    const $tagPickerItemsList = document.getElementById('tag-picker-list');
+    $tagPickerItemsList.replaceChildren();
+
+    this.state.tags.ids.forEach((tagId) => {
+      const tag = this.state.tags.byId.get(tagId);
+      $tagPickerItemsList.append(this.createTagPickerItem(tag));
+    });
+  }
+
+  setVideoTag(videoIdOrDom, tagId) {
+    const $video =
+      typeof videoIdOrDom === 'string'
+        ? this.videoFactory.find(videoIdOrDom)
+        : videoIdOrDom;
+    if ($video) {
+      const tag = this.state.tags.byId.get(tagId);
+      const $tag = $video.querySelector('[data-tag-root]');
+      const $tagTitle = $video.querySelector('[data-tag-title]');
+      const $tagColor = $video.querySelector('[data-tag-color]');
+      const $tagDelete = $video.querySelector(
+        '[data-component="video-tag-del-button"]',
+      );
+      $tag.dataset.tagRoot = tagId ?? '';
+      $tagTitle.textContent = tag?.title ?? HomePage.defaultTagLabel;
+      $tagDelete.hidden = !tagId;
+      if (tagId && tag?.color) {
+        $tagColor.style.setProperty('--tag-color', tag.color);
+      } else {
+        $tagColor.style.removeProperty('--tag-color');
+      }
+    }
+  }
+
+  createTagPickerItem(tag) {
+    const $itemTmpl = document.getElementById('tag-item-template');
+    const $item = $itemTmpl.content.firstElementChild.cloneNode(true);
+    $item.dataset.tagRoot = tag.id;
+    $item.querySelector('[data-tag-title]').textContent = tag.title;
+    $item.querySelector(
+      '[data-component="tag-picker-item-select"]',
+    ).dataset.tagId = tag.id;
+    $item.querySelector(
+      '[data-component="tag-picker-item-edit"]',
+    ).dataset.tagId = tag.id;
+    if (tag.color) {
+      $item
+        .querySelector('[data-tag-color]')
+        .style.setProperty('--tag-color', tag.color);
+    }
+    return $item;
+  }
+
+  createTagToFilterBy(tag) {
+    const $tmpl = document.getElementById('selected-filter-tag');
+    const $tag = $tmpl.content.firstElementChild.cloneNode(true);
+    $tag.dataset.tagRoot = tag.id;
+    if (tag.color) {
+      $tag
+        .querySelector('[data-tag-color]')
+        .style.setProperty('--tag-color', tag.color);
+    }
+    $tag.querySelector('[data-tag-title]').textContent = tag.title;
+    $tag
+      .querySelector('[data-component="selected-filter-tag-del-button"]')
+      .addEventListener(
+        'click',
+        () => {
+          this.state.selectedTagId = null;
+          this.state.filteredVideos = null;
+          this.state.renderedVideosCount = 0;
+          $tag.remove();
+          this.refreshVideos();
+        },
+        { once: true },
+      );
+    return $tag;
+  }
+
+  prepareTagPicker() {
+    const $tagPickerPopover = document.getElementById('tag-picker');
+    const $tagPickerItemsList = document.getElementById('tag-picker-list');
+    const $tagPickerNewItemForm = document.getElementById('tag-picker-form');
+    const $tagPickerNewItemInput = document.getElementById('tag-picker-input');
+
+    $tagPickerNewItemInput.setAttribute('minLength', TAG_TITLE_CONSTRAINS.min);
+    $tagPickerNewItemInput.setAttribute('maxLength', TAG_TITLE_CONSTRAINS.max);
+
+    let action; // select-filter-tag | select-video-tag
+    let videoId;
+
+    $tagPickerPopover.addEventListener('beforetoggle', (e) => {
+      if (e.newState === 'open' && e.source.dataset.action) {
+        action = e.source.dataset.action;
+        videoId = e.source.dataset.videoId;
+      }
+    });
+
+    $tagPickerNewItemForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const tagTitle = new FormData(e.target).get('tag');
+      $tagPickerNewItemInput.value = tagTitle.trim();
+      const isValid = $tagPickerNewItemInput.checkValidity();
+      if (isValid) {
+        // TODO: set random color?
+        const result = await this.services.createTag({ title: tagTitle });
+        if (result.success) {
+          this.state.tags.byId.set(result.tag.id, result.tag);
+          this.state.tags.ids.push(result.tag.id);
+          $tagPickerItemsList.prepend(this.createTagPickerItem(result.tag));
+          $tagPickerNewItemInput.value = '';
+        }
+      }
+    });
+
+    $tagPickerItemsList.addEventListener('click', async (e) => {
+      const tagId = e.target.closest('[data-tag-picker-action][data-tag-id]')
+        ?.dataset.tagId;
+      if (!tagId) return;
+      if (action === 'select-filter-tag') {
+        this.state.selectedTagId = tagId;
+        this.state.renderedVideosCount = 0;
+        this.state.filteredVideos = this.state.videos.ids.filter(
+          (id) => this.state.videos.byId.get(id).tagId?.[0] === tagId,
+        );
+        document
+          .querySelector('[data-component="selected-filter-tag"]')
+          ?.remove();
+        document
+          .getElementById('page-header')
+          .append(this.createTagToFilterBy(this.state.tags.byId.get(tagId)));
+        this.refreshVideos();
+
+        $tagPickerPopover.hidePopover();
+      }
+      if (action === 'select-video-tag' && videoId) {
+        const result = await this.services.setTag(videoId, tagId);
+
+        if (result.success) {
+          this.state.videos.byId.set(videoId, {
+            ...this.state.videos.byId.get(videoId),
+            tagId: [tagId],
+          });
+
+          if (this.state.selectedTagId && this.state.selectedTagId !== tagId) {
+            this.videoFactory.find(videoId)?.remove();
+          } else {
+            this.setVideoTag(videoId, tagId);
+          }
+
+          $tagPickerPopover.hidePopover();
+        }
+      }
+    });
+  }
+
+  prepareTagEditPopover() {
+    const $tagEditPopover = document.getElementById('tag-picker-edit');
+    const $tagEditInput = document.getElementById('tag-picker-edit-input');
+    const $tagEditForm = document.getElementById('tag-picker-edit-form');
+    const $tagDeleteButton = document.getElementById('tag-picker-edit-delete');
+    let editedTagId;
+
+    const $tagColors = document.getElementById('tag-picker-edit-colors');
+    const $colorTmpl = document.getElementById(
+      'tag-picker-color-item-template',
+    );
+    // Set colors only ones
+    Object.entries(colors).map(([colorName, hex]) => {
+      const $colorOption = $colorTmpl.content.firstElementChild.cloneNode(true);
+      $colorOption.style.backgroundColor = hex;
+      $colorOption.querySelector(
+        '[data-component="tag-picker-color-name"]',
+      ).textContent = colorName;
+      $colorOption.querySelector(
+        '[data-component="tag-picker-color-item-input"]',
+      ).value = hex;
+      $tagColors.append($colorOption);
+    });
+
+    $tagEditPopover.addEventListener('beforetoggle', (e) => {
+      // Trigger button (edit button) must hold data-tag-id
+      if (e.newState === 'open' && e.source.dataset.tagId) {
+        editedTagId = e.source.dataset.tagId;
+        $tagEditInput.value = this.state.tags.byId.get(editedTagId).title;
+      }
+    });
+
+    $tagEditForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const tag = this.state.tags.byId.get(editedTagId);
+      const tagTitle = new FormData(e.target).get('tag');
+      $tagEditInput.value = tagTitle.trim();
+      const isValid = $tagEditInput.checkValidity();
+
+      if (isValid) {
+        const result = await this.services.updateTag({
+          ...tag,
+          title: tagTitle,
+        });
+        if (result.success) {
+          this.state.tags.byId.set(result.tag.id, result.tag);
+          document
+            .querySelectorAll(
+              `[data-tag-root="${result.tag.id}"] [data-tag-title]`,
+            )
+            .forEach(($title) => {
+              if ($title.textContent === tag.title)
+                $title.textContent = tagTitle;
+            });
+        }
+      }
+    });
+
+    $tagColors.addEventListener('change', async (e) => {
+      if (e.target.value) {
+        const tag = this.state.tags.byId.get(editedTagId);
+        tag.color = e.target.value;
+        const result = await this.services.updateTag(tag);
+
+        if (result.success) {
+          this.state.tags.byId.set(result.tag.id, tag);
+          document
+            .querySelectorAll(
+              `[data-tag-root="${result.tag.id}"][data-tag-color], [data-tag-root="${result.tag.id}"] [data-tag-color]`,
+            )
+            .forEach(($t) => {
+              $t.style.setProperty('--tag-color', e.target.value);
+            });
+        }
+      }
+    });
+
+    $tagDeleteButton.addEventListener('click', async () => {
+      const tagId = editedTagId;
+      if (tagId) {
+        const result = await this.services.deleteTag(tagId);
+
+        if (result.success) {
+          this.state.videos.byId.forEach((video, videoId) => {
+            if (video.tagId[0] === tagId) {
+              video.tagId = [];
+              this.state.videos.byId.set(videoId, video);
+            }
+          });
+          this.state.tags.byId.delete(tagId);
+          this.state.tags.ids = this.state.tags.ids.filter(
+            (id) => id !== tagId,
+          );
+
+          $tagEditPopover.hidePopover();
+
+          document
+            .querySelector(`#tag-picker-list [data-tag-root="${tagId}"]`)
+            ?.remove();
+
+          if (this.state.selectedTagId) {
+            document
+              .querySelector('[data-component="selected-filter-tag"]')
+              ?.remove();
+            this.state.selectedTagId = null;
+            this.state.filteredVideos = null;
+            this.state.renderedVideosCount = 0;
+            this.refreshVideos();
+          } else {
+            this.videoFactory.findAll().forEach(($v) => {
+              if (
+                $v.querySelector('[data-tag-root]').dataset.tagRoot === tagId
+              ) {
+                this.setVideoTag($v, null);
+              }
+            });
+          }
+        }
+      }
+    });
+  }
+
+  prepareColorPicker() {
     const $colorPickerPopover = document.getElementById(
       'bookmark-color-picker',
     );
@@ -285,18 +618,26 @@ export default class HomePage {
         this.state.renderedVideosCount = 0;
         this.state.filteredVideos = [];
         this.state.videos.byId.forEach((video, videoId) => {
-          if (video.title.toLowerCase().includes(value)) {
+          if (
+            video.title.toLowerCase().includes(value) &&
+            (this.state.selectedTagId
+              ? video.tagId?.[0] === this.state.selectedTagId
+              : true)
+          ) {
             this.state.filteredVideos.push(videoId);
-          } else {
           }
         });
-        this.findVideosList()?.replaceChildren();
-        this.renderVideos();
+        this.refreshVideos();
       } else {
         this.state.renderedVideosCount = 0;
-        this.state.filteredVideos = null;
-        this.findVideosList()?.replaceChildren();
-        this.renderVideos();
+        this.state.filteredVideos = this.state.selectedTagId
+          ? this.state.videos.ids.filter(
+              (id) =>
+                this.state.videos.byId.get(id).tagId?.[0] ===
+                this.state.selectedTagId,
+            )
+          : null;
+        this.refreshVideos();
       }
     });
   }
