@@ -80,3 +80,28 @@ export async function getVideoId() {
   });
   return checkVideoPageByUrl(activeTab.url)?.videoId;
 }
+
+export const THEME_KEY = 'theme';
+
+export function getAppliedTheme() {
+  return document.documentElement.dataset.theme;
+}
+
+export function applyTheme(mode) {
+  document.documentElement.dataset.theme = mode;
+}
+
+export function resolveTheme(mode) {
+  if (mode === 'system') {
+    return matchMedia('(prefer-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  return mode;
+}
+
+export async function saveTheme(mode) {
+  return chrome.storage.local.set({ [THEME_KEY]: mode });
+}
+
+export function getSavedTheme() {
+  return chrome.storage.local.get(THEME_KEY);
+}

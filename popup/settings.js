@@ -1,3 +1,11 @@
+import {
+  applyTheme,
+  getAppliedTheme,
+  getSavedTheme,
+  resolveTheme,
+  saveTheme,
+} from './popupUtils.js';
+
 export default class SettingsPage {
   services;
   onNavigate;
@@ -23,6 +31,7 @@ export default class SettingsPage {
     this.renderImportExport();
     this.renderShortcutsSection();
     this.renderResetDataSection();
+    this.prepareThemeSwitcher();
   }
 
   async fetchSettings() {
@@ -187,6 +196,28 @@ export default class SettingsPage {
           document.getElementById('reset-alert-message').textContent =
             'Something went wrong!';
         }
+      });
+  }
+
+  checkThemeOption(theme = 'theme') {
+    document
+      .querySelectorAll('[data-component="theme-input"]')
+      .forEach(($input) => {
+        if ($input.value === theme) $input.checked = true;
+      });
+  }
+
+  prepareThemeSwitcher() {
+    this.checkThemeOption(getAppliedTheme());
+    getSavedTheme().then(({ theme }) => {
+      this.checkThemeOption(theme);
+    });
+    document
+      .getElementById('theme-switcher')
+      .addEventListener('change', async (e) => {
+        const themeMode = new FormData(e.currentTarget).get('theme');
+        await saveTheme(themeMode);
+        applyTheme(resolveTheme(themeMode));
       });
   }
 }

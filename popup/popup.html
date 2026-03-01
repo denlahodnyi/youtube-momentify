@@ -386,6 +386,106 @@
       </div>
       <div class="page__content settings__content">
         <section class="settings__section">
+          <form id="theme-switcher" class="theme-switcher">
+            <label class="btn-base btn theme-switcher__button">
+              <svg
+                aria-hidden
+                xmlns="http://www.w3.org/2000/svg"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <circle cx="12" cy="12" r="4" />
+                <path d="M12 2v2" />
+                <path d="M12 20v2" />
+                <path d="m4.93 4.93 1.41 1.41" />
+                <path d="m17.66 17.66 1.41 1.41" />
+                <path d="M2 12h2" />
+                <path d="M20 12h2" />
+                <path d="m6.34 17.66-1.41 1.41" />
+                <path d="m19.07 4.93-1.41 1.41" />
+              </svg>
+              Light
+              <input
+                type="radio"
+                name="theme"
+                value="light"
+                data-component="theme-input"
+                class="scr-only"
+              />
+            </label>
+            <label class="btn-base btn theme-switcher__button">
+              <svg
+                aria-hidden
+                xmlns="http://www.w3.org/2000/svg"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path
+                  d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"
+                />
+              </svg>
+              Dark
+              <input
+                type="radio"
+                name="theme"
+                value="dark"
+                data-component="theme-input"
+                class="scr-only"
+              />
+            </label>
+            <label class="btn-base btn theme-switcher__button">
+              <svg
+                aria-hidden
+                xmlns="http://www.w3.org/2000/svg"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M12 17v4" />
+                <path d="m14.305 7.53.923-.382" />
+                <path d="m15.228 4.852-.923-.383" />
+                <path d="m16.852 3.228-.383-.924" />
+                <path d="m16.852 8.772-.383.923" />
+                <path d="m19.148 3.228.383-.924" />
+                <path d="m19.53 9.696-.382-.924" />
+                <path d="m20.772 4.852.924-.383" />
+                <path d="m20.772 7.148.924.383" />
+                <path
+                  d="M22 13v2a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7"
+                />
+                <path d="M8 21h8" />
+                <circle cx="18" cy="6" r="3" />
+              </svg>
+              System
+              <input
+                type="radio"
+                name="theme"
+                value="system"
+                data-component="theme-input"
+                class="scr-only"
+                checked
+              />
+            </label>
+          </form>
+        </section>
+        <section class="settings__section">
           <h2 class="settings__section-title">UI settings</h2>
           <form id="content-settings-form">
             <div class="ui-settings__controller">
