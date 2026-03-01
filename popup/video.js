@@ -74,9 +74,9 @@ export default class Video {
       this.dom
         .querySelector('[data-component="bookmarks-list"]')
         .replaceChildren();
-      this.dom.querySelector(
-        '[data-component="empty-video-msg"]',
-      ).style.display = 'block';
+      // this.dom.querySelector(
+      //   '[data-component="empty-video-msg"]',
+      // ).style.display = 'block';
     }
   }
 

@@ -110,8 +110,15 @@ export default class SettingsPage {
       for (const { shortcut, description } of commands) {
         if (shortcut && description) {
           const $shortcut = $shortcutsTmpl.content.cloneNode(true);
-          $shortcut.querySelector('[data-component="shortcut"]').textContent =
-            shortcut;
+          $shortcut
+            .querySelector('[data-component="shortcut"]')
+            .insertAdjacentHTML(
+              'afterbegin',
+              shortcut
+                .split('')
+                .map((sh) => `<kbd>${sh}</kbd>`)
+                .join(''),
+            );
           $shortcut.querySelector(
             '[data-component="shortcut-desc"]',
           ).textContent = description;
@@ -151,8 +158,10 @@ export default class SettingsPage {
             const $alert = document.getElementById('import-alert');
 
             if (result.success) {
+              $alert.dataset.success = true;
               $alert.textContent = 'Data imported successfully!';
             } else {
+              $alert.dataset.error = true;
               $alert.textContent = result.error;
             }
           } catch (err) {
@@ -167,8 +176,17 @@ export default class SettingsPage {
   renderResetDataSection() {
     document
       .getElementById('reset-alert-confirm-button')
-      .addEventListener('click', () => {
-        this.services.resetData();
+      .addEventListener('click', async () => {
+        const result = await this.services.resetData();
+        if (result.success) {
+          document.getElementById('reset-alert-message').dataset.success = true;
+          document.getElementById('reset-alert-message').textContent =
+            'Success!';
+        } else {
+          document.getElementById('reset-alert-message').dataset.error = true;
+          document.getElementById('reset-alert-message').textContent =
+            'Something went wrong!';
+        }
       });
   }
 }

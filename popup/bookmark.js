@@ -29,18 +29,25 @@ export default class Bookmark {
       ).textContent = formatTime(bookmark.time);
 
       // Title
-      const $title = this.dom.querySelector(
-        '[data-component="bookmark-title"]',
-      );
+      // const $title = this.dom.querySelector(
+      //   '[data-component="bookmark-title"]',
+      // );
       const $titleInput = this.dom.querySelector(
         '[data-component="bookmark-title-input"]',
       );
-      const $titleCharsCount = $title.querySelector(
+      const $titleCharsCountMessage = this.dom.querySelector(
+        '[data-component="bookmark-title-chars-hint"]',
+      );
+      const $titleCharsCount = this.dom.querySelector(
         '[data-component="bookmark-title-chars-count"]',
       );
+      $titleCharsCountMessage.id = `bm-title-count-${bookmark.id}`;
       $titleInput.value = bookmark.title;
+      $titleInput.id = `bm-input-${bookmark.id}`;
       $titleInput.setAttribute('minLength', BOOKMARK_TITLE_CONSTRAINS.min);
       $titleInput.setAttribute('maxLength', BOOKMARK_TITLE_CONSTRAINS.max);
+      $titleInput.setAttribute('aria-describedby', $titleCharsCountMessage.id);
+      this.dom.setAttribute('aria-labeledby', $titleInput.id);
       this.dom.querySelector(
         '[data-component="bookmark-title-chars-max-count"]',
       ).textContent = BOOKMARK_TITLE_CONSTRAINS.max;
@@ -76,12 +83,17 @@ export default class Bookmark {
       const $noteInput = this.dom.querySelector(
         '[data-component="bookmark-note-input"]',
       );
+      const $noteCharsCountMessage = this.dom.querySelector(
+        '[data-component="bookmark-note-chars-hint"]',
+      );
       const $noteCharsCount = this.dom.querySelector(
         '[data-component="bookmark-note-chars-count"]',
       );
+      $noteCharsCountMessage.id = `bm-note-count-${bookmark.id}`;
       $noteInput.value = bookmark.note || '';
       $noteInput.setAttribute('minLength', BOOKMARK_NOTE_CONSTRAINS.min);
       $noteInput.setAttribute('maxLength', BOOKMARK_NOTE_CONSTRAINS.max);
+      $noteInput.setAttribute('aria-describedby', $noteCharsCountMessage.id);
       $noteCharsCount.textContent = bookmark.note.length || 0;
       this.dom.querySelector(
         '[data-component="bookmark-note-chars-max-count"]',

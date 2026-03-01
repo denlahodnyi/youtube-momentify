@@ -24,7 +24,7 @@ export default class HomePage {
     tagsEarlyRequest: null,
   };
 
-  static defaultTagLabel = 'Tag';
+  static defaultTagLabel = '';
 
   constructor({ videoId, handleNavToSettings }, { Services, Bookmark, Video }) {
     this.services = Services;
@@ -148,10 +148,10 @@ export default class HomePage {
         if ($videoItem) {
           if (i > 10) $videoItem.style.contentVisibility = 'auto';
           $videosList.append($videoItem);
-          const $bmList = $videoItem.querySelector(
-            '[data-component="bookmarks-list"]',
-          );
-          $bmList.style.display = 'block';
+          // const $bmList = $videoItem.querySelector(
+          //   '[data-component="bookmarks-list"]',
+          // );
+          // $bmList.style.display = 'block';
 
           if (
             this.state.videoId === videoId ||
@@ -243,7 +243,7 @@ export default class HomePage {
     const $videosContainer = document.getElementById('videos-list');
     $videosContainer?.insertAdjacentHTML(
       'beforeend',
-      '<p class="empty-bookmarks-msg">No bookmarks yet</p>',
+      '<p data-empty-videos-message class="empty-bookmarks-msg">No bookmarks yet</p>',
     );
   }
 
@@ -313,6 +313,8 @@ export default class HomePage {
       } else {
         $tagColor.style.removeProperty('--tag-color');
       }
+      $video.querySelector('[data-tag-empty-title]').hidden = !!tagId;
+      $video.querySelector('[data-tag-selected-title-hint]').hidden = !tagId;
     }
   }
 
@@ -336,13 +338,11 @@ export default class HomePage {
   }
 
   createTagToFilterBy(tag) {
-    const $tmpl = document.getElementById('selected-filter-tag');
+    const $tmpl = document.getElementById('selected-filter-tag-template');
     const $tag = $tmpl.content.firstElementChild.cloneNode(true);
     $tag.dataset.tagRoot = tag.id;
     if (tag.color) {
-      $tag
-        .querySelector('[data-tag-color]')
-        .style.setProperty('--tag-color', tag.color);
+      $tag.style.setProperty('--tag-color', tag.color);
     }
     $tag.querySelector('[data-tag-title]').textContent = tag.title;
     $tag
@@ -355,6 +355,7 @@ export default class HomePage {
           this.state.renderedVideosCount = 0;
           $tag.remove();
           this.refreshVideos();
+          document.getElementById('filters-result-status').textContent = '';
         },
         { once: true },
       );
@@ -407,12 +408,13 @@ export default class HomePage {
         this.state.filteredVideos = this.state.videos.ids.filter(
           (id) => this.state.videos.byId.get(id).tagId?.[0] === tagId,
         );
+        const selectedTag = this.state.tags.byId.get(tagId);
+        const resultsCount = this.state.filteredVideos.length;
         document
-          .querySelector('[data-component="selected-filter-tag"]')
-          ?.remove();
-        document
-          .getElementById('page-header')
-          .append(this.createTagToFilterBy(this.state.tags.byId.get(tagId)));
+          .getElementById('selected-filter-tag')
+          .replaceChildren(this.createTagToFilterBy(selectedTag));
+        document.getElementById('filters-result-status').textContent =
+          `Applied tag: ${selectedTag.title}. ${resultsCount} result${resultsCount === 1 ? '' : 's'}`;
         this.refreshVideos();
 
         $tagPickerPopover.hidePopover();
@@ -452,7 +454,9 @@ export default class HomePage {
     // Set colors only ones
     Object.entries(colors).map(([colorName, hex]) => {
       const $colorOption = $colorTmpl.content.firstElementChild.cloneNode(true);
-      $colorOption.style.backgroundColor = hex;
+      $colorOption.querySelector(
+        '[data-component="tag-picker-color"]',
+      ).style.backgroundColor = hex;
       $colorOption.querySelector(
         '[data-component="tag-picker-color-name"]',
       ).textContent = colorName;
@@ -578,9 +582,9 @@ export default class HomePage {
         });
       }
     });
-    $colorPickerPopover.firstElementChild.addEventListener(
-      'change',
-      async (e) => {
+    $colorPickerPopover
+      .querySelector('#color-picker-form')
+      .addEventListener('change', async (e) => {
         this.state.$colorPickerInvoker.style.backgroundColor = e.target.value;
         const getRes = await this.services.getBookmark(
           this.state.colorPickerBookmarkId,
@@ -602,8 +606,7 @@ export default class HomePage {
             });
           }
         }
-      },
-    );
+      });
   }
 
   attachSearch() {
