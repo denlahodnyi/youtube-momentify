@@ -28,7 +28,7 @@ chrome.runtime.onInstalled.addListener((details) => {
 
 chrome.storage.onChanged.addListener(async (changes, area) => {
   if (area === 'local' && changes) {
-    const { showQuickSave, showEditedSave } = changes;
+    const { showQuickSave, showEditedSave, theme } = changes;
     const tabs = await chrome.tabs.query({
       url: getYoutubeVideoTabPattern(''),
     });
@@ -44,6 +44,12 @@ chrome.storage.onChanged.addListener(async (changes, area) => {
         chrome.tabs.sendMessage(tab.id, {
           action: 'CONTENT/TOGGLE_EDITED_SAVE',
           show: showEditedSave.newValue,
+        });
+      }
+      if (theme) {
+        chrome.tabs.sendMessage(tab.id, {
+          action: 'CONTENT/SET_THEME',
+          theme: theme.newValue,
         });
       }
     }

@@ -49,6 +49,8 @@ class ContentRenderer {
       this.state.videoId = getVideoIdFromUrl(newUrl);
       this.render();
     });
+
+    this.setupTheme();
   }
 
   async notify(sender, event) {
@@ -356,6 +358,11 @@ class ContentRenderer {
         this.removeVideoLoop();
         this.setMarkLoopUI(loopStartId, true);
         this.setMarkLoopUI(loopEndId, true);
+        break;
+      }
+      case 'ui/set_theme': {
+        const { theme } = event.payload;
+        applyTheme(resolveTheme(theme));
         break;
       }
       default:
@@ -734,6 +741,21 @@ class ContentRenderer {
     this.progressBarFactory.clearContent();
     this.clearPopups();
     this.removeVideoLoop();
+  }
+
+  async setupTheme() {
+    const { theme = 'system' } = await chrome.storage.local.get('theme');
+    applyTheme(resolveTheme(theme));
+
+    matchMedia('(prefers-color-scheme: dark)').addEventListener(
+      'change',
+      async (e) => {
+        const { theme = 'system' } = await chrome.storage.local.get('theme');
+        if (theme === 'system') {
+          applyTheme(e.matches ? 'dark' : 'light');
+        }
+      },
+    );
   }
 }
 
@@ -1530,6 +1552,12 @@ chrome.runtime.onMessage.addListener(async (message) => {
       });
       break;
     }
+    case 'CONTENT/SET_THEME': {
+      await contentRenderer.notify(null, {
+        type: 'ui/set_theme',
+        payload: { theme: message.theme },
+      });
+    }
     default:
       console.warn('[momentify] Unknown action:', message.action);
   }
@@ -1577,4 +1605,17 @@ function formatTime(timeInSec) {
   }
 
   return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function resolveTheme(mode) {
+  if (mode === 'system') {
+    return matchMedia('(prefers-color-scheme: dark)').matches
+      ? 'dark'
+      : 'light';
+  }
+  return mode;
+}
+
+function applyTheme(mode) {
+  document.documentElement.dataset.momentifyTheme = mode;
 }

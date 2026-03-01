@@ -93,7 +93,9 @@ export function applyTheme(mode) {
 
 export function resolveTheme(mode) {
   if (mode === 'system') {
-    return matchMedia('(prefer-color-scheme: dark)').matches ? 'dark' : 'light';
+    return matchMedia('(prefers-color-scheme: dark)').matches
+      ? 'dark'
+      : 'light';
   }
   return mode;
 }
