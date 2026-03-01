@@ -100,8 +100,9 @@
 
 .momentify-mark {
   transition: transform 0.2s linear;
+  box-shadow: #505050 0px 1px 1px 0px;
   &:where(:hover) {
-    transform: scale(6, 2);
+    transform: scale(3, 2);
   }
 }
 

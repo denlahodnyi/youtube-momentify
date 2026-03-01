@@ -7,7 +7,7 @@ import {
   ValidationError,
 } from './backgroundUtils.js';
 
-const DEFAULT_MARK_COLOR = '#FF7F50';
+const DEFAULT_MARK_COLOR = '#00bfff';
 const BOOKMARKS_BY_VIDEO_ID_IDX = 'bookmarks_idx/by_videoId';
 const VIDEOS_BY_CREATED_AT_IDX = 'videos_idx/by_createdAt';
 const VIDEOS_BY_TAG_IDX = 'videos_idx/by_tag';

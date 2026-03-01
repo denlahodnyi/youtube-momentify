@@ -135,7 +135,7 @@
     box-shadow: var(--shadow-elevation-low);
     transition: background-color 0.15s linear;
     &:hover {
-      color: var(--clr-primary);
+      color: light-dark(var(--clr-primary), var(--clr-muted-foreground));
       background-color: color-mix(in hsl, var(--clr-muted) 90%, transparent);
     }
   }

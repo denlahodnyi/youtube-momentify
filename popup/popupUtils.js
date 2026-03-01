@@ -1,12 +1,12 @@
 export const colors = {
-  DarkCyan: '#008b8b'.toLowerCase(),
-  DeepSkyBlue: '#00bfff'.toLowerCase(),
-  MediumSlateBlue: '#7b68ee'.toLowerCase(),
-  LightGreen: '#90ee90'.toLowerCase(),
-  Coral: '#ff7f50'.toLowerCase(),
-  NavajoWhite: '#FFDEAD'.toLowerCase(),
-  Violet: '#ee82ee'.toLowerCase(),
-  Yellow: '#FFFF00'.toLowerCase(),
+  'Kiwi Pulp': '#9CEF43'.toLowerCase(),
+  'Deep Sky Blue': '#00bfff'.toLowerCase(),
+  'Bright Indigo': '#6F00FE'.toLowerCase(),
+  Clover: '#008F00'.toLowerCase(),
+  Azul: '#1D5DEC'.toLowerCase(),
+  'Peach Damask': '#F6C4A6'.toLowerCase(),
+  'Distilled Rose': '#FFBBFF'.toLowerCase(),
+  'Banana King': '#FFFB08'.toLowerCase(),
 };
 
 export function formatTime(timeInSec) {
