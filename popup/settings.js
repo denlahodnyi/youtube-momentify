@@ -13,33 +13,44 @@ export default class SettingsPage {
     settings: {
       showEditedSave: false,
       showQuickSave: false,
+      theme: 'system',
     },
+    shortcuts: [],
     settingsEarlyRequest: null,
+    shortcutsEarlyRequest: null,
   };
 
   constructor({ Services }) {
     this.services = Services;
     this.state.settingsEarlyRequest = this.fetchSettings();
+    this.state.shortcutsEarlyRequest = this.fetchShortcuts();
   }
 
   render($container) {
     this.renderPageLayout($container);
-    (this.state.settingsEarlyRequest ?? this.fetchSettings()).then(() => {
-      this.state.settingsEarlyRequest = null;
+    this.state.settingsEarlyRequest.then(() => {
       this.renderContentSettings();
+      this.prepareThemeSwitcher();
+    });
+    this.state.shortcutsEarlyRequest.then(() => {
+      this.renderShortcutsSection();
     });
     this.renderImportExport();
-    this.renderShortcutsSection();
     this.renderResetDataSection();
-    this.prepareThemeSwitcher();
   }
 
   async fetchSettings() {
     const settings = await chrome.storage.local.get([
       'showEditedSave',
       'showQuickSave',
+      'theme',
     ]);
     this.state.settings = settings;
+  }
+
+  async fetchShortcuts() {
+    const commands = await chrome.commands.getAll();
+    this.state.shortcuts = commands;
   }
 
   renderPageLayout($container) {
@@ -89,14 +100,16 @@ export default class SettingsPage {
       });
     }
     if ($form) {
-      $form.addEventListener('change', (e) => {
+      $form.addEventListener('change', async (e) => {
         const data = new FormData(e.currentTarget);
         const showQuickSave = data.get('quick-save');
         const showEditedSave = data.get('edited-save');
-        chrome.storage.local.set({
+        await chrome.storage.local.set({
           showQuickSave: showQuickSave === 'on',
           showEditedSave: showEditedSave === 'on',
         });
+        this.state.settings.showQuickSave = showQuickSave === 'on';
+        this.state.settings.showEditedSave = showEditedSave === 'on';
       });
     }
   }
@@ -110,13 +123,11 @@ export default class SettingsPage {
       });
     });
 
-    const commands = await chrome.commands.getAll();
-
-    if (commands.length) {
+    if (this.state.shortcuts.length) {
       const $shortcutsList = document.getElementById('shortcuts');
       const $shortcutsTmpl = document.getElementById('shortcut-template');
 
-      for (const { shortcut, description } of commands) {
+      for (const { shortcut, description } of this.state.shortcuts) {
         if (shortcut && description) {
           const $shortcut = $shortcutsTmpl.content.cloneNode(true);
           $shortcut
@@ -208,16 +219,14 @@ export default class SettingsPage {
   }
 
   prepareThemeSwitcher() {
-    this.checkThemeOption(getAppliedTheme());
-    getSavedTheme().then(({ theme }) => {
-      this.checkThemeOption(theme);
-    });
+    this.checkThemeOption(this.state.settings.theme);
     document
       .getElementById('theme-switcher')
       .addEventListener('change', async (e) => {
         const themeMode = new FormData(e.currentTarget).get('theme');
         await saveTheme(themeMode);
         applyTheme(resolveTheme(themeMode));
+        this.state.settings.theme = themeMode;
       });
   }
 }

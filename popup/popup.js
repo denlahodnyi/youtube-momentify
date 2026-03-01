@@ -1,6 +1,5 @@
 import {
   applyTheme,
-  getAppliedTheme,
   getSavedTheme,
   getVideoId,
   resolveTheme,
