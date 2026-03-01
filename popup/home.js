@@ -609,39 +609,51 @@ export default class HomePage {
       });
   }
 
+  searchVideos(title) {
+    if (title) {
+      this.state.renderedVideosCount = 0;
+      this.state.filteredVideos = [];
+      this.state.videos.byId.forEach((video, videoId) => {
+        if (
+          video.title.toLowerCase().includes(title) &&
+          (this.state.selectedTagId
+            ? video.tagId?.[0] === this.state.selectedTagId
+            : true)
+        ) {
+          this.state.filteredVideos.push(videoId);
+        }
+      });
+      this.refreshVideos();
+    } else {
+      this.state.renderedVideosCount = 0;
+      this.state.filteredVideos = this.state.selectedTagId
+        ? this.state.videos.ids.filter(
+            (id) =>
+              this.state.videos.byId.get(id).tagId?.[0] ===
+              this.state.selectedTagId,
+          )
+        : null;
+      this.refreshVideos();
+    }
+  }
+
+  searchTimer = null;
+
   attachSearch() {
     const $searchForm = document.getElementById('search');
+    $searchForm.addEventListener('input', (e) => {
+      clearTimeout(this.searchTimer);
+      this.searchTimer = setTimeout(() => {
+        clearTimeout(this.searchTimer);
+        this.searchVideos(e.target.value);
+      }, 1200);
+    });
     $searchForm.addEventListener('submit', (e) => {
       e.preventDefault();
+      clearTimeout(this.searchTimer);
       const formData = new FormData($searchForm);
       const value = formData.get('search').trim().toLowerCase();
-
-      if (value) {
-        // TODO: show something if no results found?
-        this.state.renderedVideosCount = 0;
-        this.state.filteredVideos = [];
-        this.state.videos.byId.forEach((video, videoId) => {
-          if (
-            video.title.toLowerCase().includes(value) &&
-            (this.state.selectedTagId
-              ? video.tagId?.[0] === this.state.selectedTagId
-              : true)
-          ) {
-            this.state.filteredVideos.push(videoId);
-          }
-        });
-        this.refreshVideos();
-      } else {
-        this.state.renderedVideosCount = 0;
-        this.state.filteredVideos = this.state.selectedTagId
-          ? this.state.videos.ids.filter(
-              (id) =>
-                this.state.videos.byId.get(id).tagId?.[0] ===
-                this.state.selectedTagId,
-            )
-          : null;
-        this.refreshVideos();
-      }
+      this.searchVideos(value);
     });
   }
 
