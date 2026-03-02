@@ -423,16 +423,16 @@ class ContentRenderer {
       saveWithEditButton.dom.hidden = !settings.showEditedSave;
 
       const $controlsContainer = document.body.querySelector(
-        '#movie_player .ytp-right-controls',
+        '#movie_player .ytp-left-controls',
       );
 
       if ($controlsContainer) {
         $controlsContainer.insertAdjacentElement(
-          'afterbegin',
+          'beforeend',
           quickSaveButton.dom,
         );
         $controlsContainer.insertAdjacentElement(
-          'afterbegin',
+          'beforeend',
           saveWithEditButton.dom,
         );
       } else {
@@ -781,13 +781,27 @@ class BookmarkButton {
   constructor(isQuick = false) {
     this.isQuick = isQuick;
     this.id = BookmarkButton.createDomId(isQuick);
-    // TODO: change or remove color?
-    const color = isQuick ? 'red' : 'blue';
     const label = isQuick ? 'Save quick bookmark' : 'Edit and save bookmark';
-    const specialClass = isQuick ? 'ytp-quick-save-btn' : 'ytp-edited-save-btn';
-    const $button = createDomElement(`
-        <button id=${this.id} aria-label="${label}" class="${specialClass} momentify-bookmark-btn ytp-button" style="display: flex; align-items: center; justify-content: center; color: ${color}">
-          <svg aria-hidden xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-bookmark-icon lucide-bookmark"><path d="M17 3a2 2 0 0 1 2 2v15a1 1 0 0 1-1.496.868l-4.512-2.578a2 2 0 0 0-1.984 0l-4.512 2.578A1 1 0 0 1 5 20V5a2 2 0 0 1 2-2z"/></svg>
+    const $button = isQuick
+      ? createDomElement(`
+        <button id=${this.id} aria-label="${label}" class="momentify-bookmark-btn ytp-button" style="padding: 0; display: flex; align-items: center; justify-content: center;">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="1" stroke-linecap="round" stroke-linejoin="round" style="padding: 0;">
+            <path fill="none" d="M7 3a2 2 0 0 0-2 2v14.5c0 .6.6 1 1.1.7L12 17.2l5.9 3c.5.3 1.1-.1 1.1-.7V5a2 2 0 0 0-2-2H7z"/>
+          </svg>
+        </button>
+      `)
+      : createDomElement(`
+        <button id=${this.id} aria-label="${label}" class="momentify-bookmark-btn ytp-button" style="padding: 0; display: flex; align-items: center; justify-content: center;">
+          <svg width="30" height="30" viewBox="0 0 24 24" style="padding: 0;">
+            <mask id="pen-cut">
+              <rect width="24" height="24" fill="white"/>
+              <path fill="black" d="M10 11.5l4-4a1.6 1.6 0 0 1 2.3 2.3l-4 4-3 .7.7-3z"/>
+            </mask>
+            <path fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" fill="currentColor"
+              mask="url(#pen-cut)"
+              d="M7 3a2 2 0 0 0-2 2v14.5c0 .6.6 1 1.1.7L12 17.2l5.9 3c.5.3 1.1-.1 1.1-.7V5a2 2 0 0 0-2-2H7z"/>
+          </svg>
         </button>
       `);
     $button.addEventListener('click', this.handleSaveBookmark.bind(this));
