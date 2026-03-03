@@ -91,20 +91,24 @@ class ContentRenderer {
             })
             .filter((time) => typeof time !== 'undefined');
           let next = timestamps[0];
+          let start = 0;
+          let end = timestamps.length - 1;
 
-          for (let a = 0, b = timestamps.length - 1; a <= b; a++, b--) {
-            if (timestamps[a] > $video.currentTime) {
-              next = timestamps[a];
-              break;
+          if (
+            $video.currentTime < timestamps[0] ||
+            $video.currentTime >= timestamps.at(-1)
+          ) {
+            next = timestamps[0];
+          } else {
+            while (start !== end) {
+              const mid = Math.floor((start + end) / 2);
+              if ($video.currentTime >= timestamps[mid]) {
+                start = mid + 1;
+              } else {
+                end = mid;
+              }
             }
-            if (timestamps.length === 2 && timestamps[b] > $video.currentTime) {
-              next = timestamps[b];
-              break;
-            }
-            if (timestamps[b] <= $video.currentTime) {
-              next = timestamps[b === timestamps.length - 1 ? 0 : b + 1];
-              break;
-            }
+            next = timestamps[start];
           }
 
           if (next) {
@@ -127,23 +131,24 @@ class ContentRenderer {
             })
             .filter((time) => typeof time !== 'undefined');
           let next = timestamps.at(-1);
+          let start = 0;
+          let end = timestamps.length - 1;
 
-          for (let a = 0, b = timestamps.length - 1; a <= b; a++, b--) {
-            if (timestamps[a] >= $video.currentTime) {
-              next = timestamps.at(a === 0 ? -1 : a - 1);
-              break;
+          if (
+            $video.currentTime <= timestamps[0] ||
+            $video.currentTime > timestamps.at(-1)
+          ) {
+            next = timestamps.at(-1);
+          } else {
+            while (start !== end) {
+              const mid = Math.ceil((start + end) / 2);
+              if ($video.currentTime <= timestamps[mid]) {
+                end = mid - 1;
+              } else {
+                start = mid;
+              }
             }
-            if (
-              timestamps.length === 2 &&
-              timestamps[b] >= $video.currentTime
-            ) {
-              next = timestamps[a];
-              break;
-            }
-            if (timestamps[b] < $video.currentTime) {
-              next = timestamps[b];
-              break;
-            }
+            next = timestamps[start];
           }
 
           if (next) {

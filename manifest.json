@@ -39,13 +39,13 @@
     },
     "next-bookmark": {
       "suggested_key": {
-        "default": "Shift+Alt+Right"
+        "default": "Shift+Alt+Up"
       },
       "description": "Go to next bookmark"
     },
     "previous-bookmark": {
       "suggested_key": {
-        "default": "Shift+Alt+Left"
+        "default": "Shift+Alt+Down"
       },
       "description": "Go to previous bookmark"
     }
