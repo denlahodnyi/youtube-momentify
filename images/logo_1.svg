@@ -1,0 +1,35 @@
+<svg width="128" height="128" viewBox="30 14 218 256" xmlns="http://www.w3.org/2000/svg" version="1.1">
+
+  <defs>
+    <!-- Fully continuous rounded bookmark -->
+    <path id="bookmark"
+      d="
+      M30 0
+      Q0 0 0 30
+      L0 170
+      Q0 200 30 200
+      C45 200 50 185 60 170
+      C70 185 75 200 90 200
+      Q120 200 120 170
+      L120 30
+      Q120 0 90 0
+      Z"
+    />
+  </defs>
+
+  <!-- Rear -->
+  <g transform="translate(120,15)">
+    <use href="#bookmark" fill="#d8d8d8"/>
+  </g>
+
+  <!-- Middle -->
+  <g transform="translate(80,40)">
+    <use href="#bookmark" fill="#f27b36"/>
+  </g>
+
+  <!-- Front -->
+  <g transform="translate(40,69)">
+    <use href="#bookmark" fill="#6e4af2"/>
+  </g>
+
+</svg>
