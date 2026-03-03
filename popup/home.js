@@ -74,6 +74,10 @@ export default class HomePage {
     this.state.renderedVideosCount = 0;
     this.state.filteredVideos = null;
     this.state.selectedTagId = null;
+    this.state.videoBookmarks.clear();
+    this.state.boundBookmarksRenderHandlers.clear();
+    this.state.bookmarks.byId.clear();
+    this.state.bookmarks.ids = [];
     this.renderPageLayout($container);
     Promise.all([
       this.state.videosEarlyRequest ?? this.fetchVideosData(),

@@ -68,7 +68,7 @@ export default class Bookmark {
           const result = await this.services.updateBookmark(updatedBookmark);
 
           if (result.success) {
-            onBookmarkUpdate?.(updatedBookmark);
+            this.onBookmarkUpdate?.(updatedBookmark);
           }
         } else {
           const { valueMissing, tooShort } = e.target.validity;
@@ -110,7 +110,7 @@ export default class Bookmark {
         const result = await this.services.updateBookmark(updatedBookmark);
 
         if (result.success) {
-          onBookmarkUpdate?.(updatedBookmark);
+          this.onBookmarkUpdate?.(updatedBookmark);
         }
       });
 
