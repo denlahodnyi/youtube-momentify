@@ -8,6 +8,7 @@ const BOOKMARK_TITLE_CONSTRAINS = { min: 1, max: 80 };
 class ContentRenderer {
   state = {
     videoId: getVideoIdFromUrl(location.href),
+    videoDuration: 0,
     loopStartTime: 0,
     loopEndTime: 0,
     bookmarks: {
@@ -44,6 +45,8 @@ class ContentRenderer {
     this.services = Services;
 
     this.boundLoopHandler = this.handleLoop.bind(this);
+    this.boundAdjustMarksOnDurChange =
+      this.adjustMarksOnDurationChange.bind(this);
 
     observeUrlChange((newUrl) => {
       this.state.videoId = getVideoIdFromUrl(newUrl);
@@ -494,10 +497,22 @@ class ContentRenderer {
         const $video = document.body.querySelector('video');
 
         if ($video) {
-          let duration = $video.duration;
+          this.state.videoDuration = $video.duration;
 
-          if (Number.isNaN(duration)) {
-            duration = await new Promise((resolve) => {
+          $video.removeEventListener(
+            'durationchange',
+            this.boundAdjustMarksOnDurChange,
+          );
+          $video.addEventListener(
+            'durationchange',
+            // Update marks position if video duration changes (this can happen
+            // after marks was already rendered)
+            // Keep in mind: ads also trigger duration change
+            this.boundAdjustMarksOnDurChange,
+          );
+
+          if (Number.isNaN(this.state.videoDuration)) {
+            this.state.videoDuration = await new Promise((resolve) => {
               $video.addEventListener(
                 'loadedmetadata',
                 () => {
@@ -508,24 +523,10 @@ class ContentRenderer {
             });
           }
 
-          $video.addEventListener(
-            'loadstart',
-            () => {
-              // Update marks position if video duration changes (this can be
-              // after marks was already rendered)
-              $video.addEventListener(
-                'loadedmetadata',
-                this.adjustMarksOnDurationChange.bind(this),
-                { once: true },
-              );
-            },
-            { once: true },
-          );
-
           const marks = this.state.bookmarks.ids.map((bookmarkId) => {
             return this.buildBookmark(
               this.state.bookmarks.byId.get(bookmarkId),
-              duration,
+              this.state.videoDuration,
             ).dom;
           });
           this.renderNewMarks(...marks);
@@ -669,12 +670,19 @@ class ContentRenderer {
   }
 
   adjustMarksOnDurationChange(e) {
+    if (
+      this.state.videoDuration === e.target.duration ||
+      isNaN(e.target.duration)
+    )
+      return;
+    this.state.videoDuration = e.target.duration;
     const marks = this.markFactory.findAllBookmarks();
 
     if (marks) {
       marks.forEach(($m) => {
         const time = this.markFactory.getMarkTime($m);
         const id = this.markFactory.getBookmarkIdFromDom($m);
+
         if (time > e.target.duration) {
           console.warn(
             `[momentify] Bookmark was removed, cause it exceeds video duration:`,
