@@ -1,10 +1,8 @@
 {
   "name": "youtube-momentify",
   "version": "1.0.0",
-  "description": "",
+  "author": "Den Lahodnyi",
   "scripts": {},
-  "keywords": [],
-  "author": "",
   "license": "MIT",
   "packageManager": "pnpm@10.17.0"
 }

@@ -1,7 +1,7 @@
 {
   "name": "YouTube Momentify",
-  "description": "",
-  "version": "1.0",
+  "description": "Bookmark and organize your favorite YouTube video moments with smart timestamps.",
+  "version": "1.0.0",
   "manifest_version": 3,
   "minimum_chrome_version": "135",
   "icons": {
