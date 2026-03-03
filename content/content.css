@@ -148,7 +148,7 @@
   inline-size: 160px;
   margin-top: var(--d);
   padding: 10px;
-  border: none;
+  border: 1px solid var(--clr-border);
   border-radius: var(--radius-md);
   color: var(--clr-foreground);
   background-color: var(--clr-background);
@@ -243,7 +243,7 @@
   inline-size: 320px;
   padding: 20px;
   border: 1px solid var(--clr-border);
-  border-radius: var(--momentify-popup-radius);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-elevation-high);
   color: var(--clr-foreground);
   background-color: var(--clr-background);
