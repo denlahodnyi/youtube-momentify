@@ -60,12 +60,12 @@ class ContentRenderer {
     switch (event.type) {
       case 'ui/toggle_quick_save': {
         const $button = this.bookmarkButtonFactory.find(true);
-        if ($button) $button.hidden = !event.payload.show;
+        if ($button) $button.parentElement.hidden = !event.payload.show;
         break;
       }
       case 'ui/toggle_edited_save': {
         const $button = this.bookmarkButtonFactory.find();
-        if ($button) $button.hidden = !event.payload.show;
+        if ($button) $button.parentElement.hidden = !event.payload.show;
         break;
       }
       case 'ui/play_video': {
@@ -413,8 +413,8 @@ class ContentRenderer {
   }
 
   async renderBookmarkButton() {
-    let quickSave = BookmarkButton.find(true);
-    let editedSave = BookmarkButton.find(false);
+    let quickSave = this.bookmarkButtonFactory.find(true);
+    let editedSave = this.bookmarkButtonFactory.find(false);
 
     if (this.state.videoId && !quickSave) {
       const settings = await chrome.storage.local.get([
@@ -797,25 +797,29 @@ class BookmarkButton {
     const label = isQuick ? 'Save quick bookmark' : 'Edit and save bookmark';
     const $button = isQuick
       ? createDomElement(`
-        <button id=${this.id} aria-label="${label}" class="momentify-bookmark-btn ytp-button" style="padding: 0; display: flex; align-items: center; justify-content: center;">
-          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              stroke-width="1" stroke-linecap="round" stroke-linejoin="round" style="padding: 0;">
-            <path fill="none" d="M7 3a2 2 0 0 0-2 2v14.5c0 .6.6 1 1.1.7L12 17.2l5.9 3c.5.3 1.1-.1 1.1-.7V5a2 2 0 0 0-2-2H7z"/>
-          </svg>
-        </button>
+        <div class="momentify-bookmark-btn-container">
+          <button id=${this.id} aria-label="${label}" class="momentify-bookmark-btn ytp-button" style="padding: 0; display: flex; align-items: center; justify-content: center;">
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="1" stroke-linecap="round" stroke-linejoin="round" style="padding: 0;">
+              <path fill="none" d="M7 3a2 2 0 0 0-2 2v14.5c0 .6.6 1 1.1.7L12 17.2l5.9 3c.5.3 1.1-.1 1.1-.7V5a2 2 0 0 0-2-2H7z"/>
+            </svg>
+          </button>
+        </div>
       `)
       : createDomElement(`
-        <button id=${this.id} aria-label="${label}" class="momentify-bookmark-btn ytp-button" style="padding: 0; display: flex; align-items: center; justify-content: center;">
-          <svg width="30" height="30" viewBox="0 0 24 24" style="padding: 0;">
-            <mask id="pen-cut">
-              <rect width="24" height="24" fill="white"/>
-              <path fill="black" d="M10 11.5l4-4a1.6 1.6 0 0 1 2.3 2.3l-4 4-3 .7.7-3z"/>
-            </mask>
-            <path fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" fill="currentColor"
-              mask="url(#pen-cut)"
-              d="M7 3a2 2 0 0 0-2 2v14.5c0 .6.6 1 1.1.7L12 17.2l5.9 3c.5.3 1.1-.1 1.1-.7V5a2 2 0 0 0-2-2H7z"/>
-          </svg>
-        </button>
+        <div class="momentify-bookmark-btn-container">
+          <button id=${this.id} aria-label="${label}" class="momentify-bookmark-btn ytp-button" style="padding: 0; display: flex; align-items: center; justify-content: center;">
+            <svg width="30" height="30" viewBox="0 0 24 24" style="padding: 0;">
+              <mask id="pen-cut">
+                <rect width="24" height="24" fill="white"/>
+                <path fill="black" d="M10 11.5l4-4a1.6 1.6 0 0 1 2.3 2.3l-4 4-3 .7.7-3z"/>
+              </mask>
+              <path fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" fill="currentColor"
+                mask="url(#pen-cut)"
+                d="M7 3a2 2 0 0 0-2 2v14.5c0 .6.6 1 1.1.7L12 17.2l5.9 3c.5.3 1.1-.1 1.1-.7V5a2 2 0 0 0-2-2H7z"/>
+            </svg>
+          </button>
+        </div>
       `);
     $button.addEventListener('click', this.handleSaveBookmark.bind(this));
     this.dom = $button;

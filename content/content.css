@@ -89,6 +89,28 @@
   }
 }
 
+.momentify-bookmark-btn-container {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  -webkit-backdrop-filter: var(
+    --yt-frosted-glass-backdrop-filter-override,
+    blur(16px)
+  );
+  backdrop-filter: var(--yt-frosted-glass-backdrop-filter-override, blur(16px));
+  background: var(
+    --yt-spec-overlay-background-medium-light,
+    rgba(0, 0, 0, 0.3)
+  );
+  & + & {
+    margin-left: 8px;
+  }
+}
 .momentify-bookmark-btn {
   &[disabled] {
     opacity: 0.3 !important;
