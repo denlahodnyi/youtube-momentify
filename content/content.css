@@ -1,0 +1,316 @@
+:root {
+  --clr-background: light-dark(#f5f6fc, #010005);
+  --clr-foreground: light-dark(#0d0d0d, #dfd4fc);
+  --clr-primary: light-dark(#6e4af2, #310db5);
+  --clr-primary-foreground: light-dark(#fff, #dfd4fc);
+  --clr-secondary: light-dark(#f27b36, #c9520d);
+  --clr-secondary-foreground: #290c2c;
+  --clr-popover: light-dark(#f5f6fc, #010005);
+  --clr-popover-foreground: light-dark(#0d0d0d, #dfd4fc);
+  --clr-muted: light-dark(#e7e7e7, #5e5e75);
+  --clr-muted-foreground: light-dark(#290c2c, #f0d3f3);
+  --clr-border: light-dark(#d8d8d8, #6c6c6c);
+  --clr-card: light-dark(#fff, #191919);
+  --clr-card-foreground: light-dark(#0d0d0d, #dfd4fc);
+  --clr-ring: light-dark(#f27b36, #c9520d);
+  --clr-success: light-dark(#009f42, #02b54d);
+  --clr-danger: light-dark(#b41c2b, #c51829);
+  --clr-danger-foreground: #fff;
+  --clr-shadow: light-dark(0deg 0% 80%, 0deg 0% 10%);
+
+  --p-page-x: 0.75rem;
+  --ring-size: 0.125rem;
+  --ring-offset: 0.125rem;
+  --ring: var(--ring-size) solid var(--clr-ring);
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.875rem;
+  --shadow-elevation-low:
+    0px 0.3px 0.5px hsl(var(--clr-shadow) / 0),
+    0.1px 1px 1.5px hsl(var(--clr-shadow) / 0.25);
+  --shadow-elevation-medium:
+    0px 0.3px 0.5px hsl(var(--clr-shadow) / 0),
+    0.2px 1.8px 2.7px hsl(var(--clr-shadow) / 0.16),
+    0.7px 5.1px 7.7px hsl(var(--clr-shadow) / 0.31);
+  --shadow-elevation-high:
+    0px 0.3px 0.5px hsl(var(--clr-shadow) / 0),
+    0.5px 3.8px 5.7px hsl(var(--clr-shadow) / 0.16),
+    1px 8.1px 12.2px hsl(var(--clr-shadow) / 0.33),
+    2.2px 17.1px 25.9px hsl(var(--clr-shadow) / 0.49);
+}
+:root {
+  color-scheme: light dark;
+}
+:root[data-momentify-theme='light'] {
+  color-scheme: light;
+}
+:root[data-momentify-theme='dark'] {
+  color-scheme: dark;
+}
+
+.scr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+.full-w {
+  inline-size: 100%;
+}
+
+.momentify-btn {
+  padding: 2px 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: inherit;
+  background-color: inherit;
+  box-shadow: var(--shadow-elevation-low);
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    color: var(--clr-primary);
+    background-color: color-mix(in hsl, var(--clr-muted) 90%, transparent);
+  }
+
+  & svg {
+    inline-size: 16px;
+    block-size: 16px;
+  }
+}
+
+.momentify-bookmark-btn-container {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  -webkit-backdrop-filter: var(
+    --yt-frosted-glass-backdrop-filter-override,
+    blur(16px)
+  );
+  backdrop-filter: var(--yt-frosted-glass-backdrop-filter-override, blur(16px));
+  background: var(
+    --yt-spec-overlay-background-medium-light,
+    rgba(0, 0, 0, 0.3)
+  );
+  & + & {
+    margin-left: 8px;
+  }
+}
+.momentify-bookmark-btn {
+  &[disabled] {
+    opacity: 0.3 !important;
+  }
+  &[data-loading='true'] {
+    cursor: wait;
+  }
+}
+
+.momentify-mark {
+  transition: transform 0.2s linear;
+  box-shadow: #505050 0px 1px 1px 0px;
+  &:where(:hover) {
+    transform: scale(3, 2);
+  }
+}
+
+#container:has(.momentify-mark-popup[open]) {
+  /* This workaround forms containing block on the YouTube video container,
+  which creates boundaries for the current opened popup and prevents overflowing
+ this container. Popup will be correctly positioned using anchor positioning fallbacks */
+  transform: translate(0) !important;
+}
+.momentify-mark-popup {
+  --d: 0.625rem; /* distance between tooltip and anchor */
+  --s: 0.5625rem; /* tail size */
+  --popup-anchor-name: --mark-popup;
+  position: fixed;
+  inset-block-end: var(--d);
+  position-anchor: var(--anchor);
+  position-area: block-start;
+  position-try-fallbacks: flip-block;
+  anchor-name: var(--popup-anchor-name);
+  z-index: 1000;
+  inline-size: 160px;
+  margin-top: var(--d);
+  padding: 10px;
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius-md);
+  color: var(--clr-foreground);
+  background-color: var(--clr-background);
+  font-family: Arial, Helvetica, sans-serif;
+  &::before {
+    content: '';
+    position: fixed;
+    z-index: -1;
+    width: var(--s);
+    margin: inherit;
+    background: inherit;
+    /* vertical position from tooltip  */
+    top: calc(anchor(var(--popup-anchor-name) top) - var(--d));
+    bottom: calc(anchor(var(--popup-anchor-name) bottom) - var(--d));
+    /* horizontal position from anchor (using variable from inline style) */
+    left: calc(anchor(var(--anchor) center) - var(--s) / 2);
+    clip-path: polygon(
+      50% 0.2em,
+      100% var(--d),
+      100% calc(100% - var(--d)),
+      50% calc(100% - 0.2em),
+      0 calc(100% - var(--d)),
+      0 var(--d)
+    );
+  }
+}
+
+.momentify-mark-popup__title {
+  margin-block-end: 6px !important;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.momentify-mark-popup__close-btn {
+  position: fixed;
+  inset-block-end: -12px;
+  inset-inline-start: -12px;
+  z-index: 1;
+  position-anchor: var(--popup-anchor-name);
+  position-area: block-start inline-end;
+  position-try-fallbacks: flip-inline;
+  inline-size: 20px;
+  block-size: 20px;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background-color: var(--clr-background);
+  color: var(--clr-foreground);
+}
+
+.momentify-mark-popup__del-btn {
+  border-color: var(--clr-danger);
+  color: var(--clr-danger);
+  &:hover {
+    color: var(--clr-danger);
+  }
+}
+
+.momentify-mark-popup__loop-btn {
+  margin-block-end: 8px;
+}
+
+.momentify-mark-popup__loop-label {
+  display: block;
+  margin-block-end: 8px;
+  padding: 0;
+  font-size: 14px;
+}
+
+.momentify-mark-popup__del-loop-btn {
+  inline-size: 20px;
+  block-size: 20px;
+  margin-inline-start: 2px;
+  padding: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--clr-border);
+  border-radius: 50%;
+
+  & svg {
+    inline-size: 12px;
+    block-size: 12px;
+  }
+}
+
+.momentify-edit-modal {
+  inline-size: 320px;
+  padding: 20px;
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-elevation-high);
+  color: var(--clr-foreground);
+  background-color: var(--clr-background);
+}
+
+.momentify-edit-modal__form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.momentify-edit-modal__label {
+  margin-block-end: 4px;
+  font-size: 14px;
+  color: inherit;
+}
+
+.momentify-edit-modal__text-field {
+  display: flex;
+  flex-direction: column;
+}
+
+.momentify-edit-modal__input {
+  padding: 12px;
+  border: 1px solid var(--clr-border);
+  border-radius: 4px;
+  color: inherit;
+  font-size: 16px;
+  background-color: inherit;
+  box-shadow: var(--shadow-elevation-low);
+}
+
+.momentify-edit-modal__helper-message {
+  margin-block-start: 4px;
+  font-size: 10px;
+  color: inherit;
+}
+
+.momentify-edit-modal__color-picker {
+  display: flex;
+  gap: 12px;
+}
+
+.momentify-edit-modal__color-option {
+  display: block;
+  inline-size: 24px;
+  block-size: 24px;
+  border: 2px solid var(--clr-border);
+  border-radius: 50%;
+  cursor: pointer;
+  &:has(input:checked) {
+    border-color: var(--clr-primary);
+  }
+  &:focus-visible {
+    outline: inherit;
+  }
+}
+
+.momentify-edit-modal__footer {
+  margin-block-start: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.momentify-edit-modal__action {
+  padding: 8px 10px;
+  font-size: 16px;
+}
