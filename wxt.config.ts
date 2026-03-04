@@ -3,6 +3,10 @@ import { defineConfig } from 'wxt';
 // See https://wxt.dev/api/config.html
 export default defineConfig({
   outDir: 'dist',
+  srcDir: 'src',
+  webExt: {
+    startUrls: ['https://www.youtube.com/watch?v=671kyCaroAo&t=431s'],
+  },
   manifest: {
     name: 'YouTube Momentify',
     description:
