@@ -1,3 +1,5 @@
+const chrome = browser;
+
 export function getYoutubeVideoTabPattern(videoId) {
   return `https://*.youtube.com/watch?v=${videoId}*`;
 }

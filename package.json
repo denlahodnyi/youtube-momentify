@@ -2,7 +2,22 @@
   "name": "youtube-momentify",
   "version": "1.0.0",
   "author": "Den Lahodnyi",
-  "scripts": {},
   "license": "MIT",
-  "packageManager": "pnpm@10.17.0"
+  "type": "module",
+  "private": true,
+  "packageManager": "pnpm@10.17.0",
+  "scripts": {
+    "dev": "wxt",
+    "dev:firefox": "wxt -b firefox",
+    "build": "wxt build",
+    "build:firefox": "wxt build -b firefox",
+    "zip": "wxt zip",
+    "zip:firefox": "wxt zip -b firefox",
+    "compile": "tsc --noEmit",
+    "postinstall": "wxt prepare"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "wxt": "^0.20.18"
+  }
 }

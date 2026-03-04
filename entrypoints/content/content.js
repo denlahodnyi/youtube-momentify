@@ -1,4 +1,9 @@
-// TODO: fix context loose error (https://stackoverflow.com/questions/53939205/how-to-avoid-extension-context-invalidated-errors-when-messaging-after-an-exte)
+// TODO: fix context loose error
+// (https://stackoverflow.com/questions/53939205/how-to-avoid-extension-context-invalidated-errors-when-messaging-after-an-exte)
+import './content.css';
+
+const chrome = browser;
+
 const QUICK_SAVE_BTN_ID = 'momentify-save-bookmark-btn';
 const SAVE_WITH_EDIT_BTN_ID = 'momentify-save-with-edit-bookmark-btn';
 const TIMESTAMPS_OUTER_CONTAINER_ID = 'momentify-bar';

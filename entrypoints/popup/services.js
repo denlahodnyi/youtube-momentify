@@ -1,3 +1,5 @@
+const chrome = browser;
+
 export default class Services {
   static async getVideos(topmostVideoId = null) {
     return chrome.runtime.sendMessage({

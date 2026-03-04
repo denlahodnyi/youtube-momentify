@@ -6,6 +6,8 @@ import {
   saveTheme,
 } from './popupUtils.js';
 
+const chrome = browser;
+
 export default class SettingsPage {
   services;
   onNavigate;

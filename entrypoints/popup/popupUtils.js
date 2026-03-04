@@ -1,3 +1,5 @@
+const chrome = browser;
+
 export const colors = {
   'Kiwi Pulp': '#9CEF43'.toLowerCase(),
   'Deep Sky Blue': '#00bfff'.toLowerCase(),
