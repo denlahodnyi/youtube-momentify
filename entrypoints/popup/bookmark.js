@@ -4,6 +4,9 @@ import {
   getCurrentVideoTabs,
   getVideoUrlWithTime,
 } from './popupUtils.js';
+
+const chrome = browser;
+
 const BOOKMARK_TITLE_CONSTRAINS = { min: 1, max: 80 };
 const BOOKMARK_NOTE_CONSTRAINS = { min: 0, max: 200 };
 

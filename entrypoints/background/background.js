@@ -7,6 +7,8 @@ import {
   ValidationError,
 } from './backgroundUtils.js';
 
+const chrome = browser;
+
 const DEFAULT_MARK_COLOR = '#00bfff';
 const BOOKMARKS_BY_VIDEO_ID_IDX = 'bookmarks_idx/by_videoId';
 const VIDEOS_BY_CREATED_AT_IDX = 'videos_idx/by_createdAt';
@@ -17,413 +19,415 @@ const BOOKMARK_NOTE_CONSTRAINS = { min: 0, max: 200 };
 const TAG_TITLE_CONSTRAINS = { min: 1, max: 20 };
 const DATA_VERSION = 1;
 
-chrome.runtime.onInstalled.addListener((details) => {
-  if (details.reason === chrome.runtime.OnInstalledReason.INSTALL) {
-    chrome.storage.local.set({
-      showQuickSave: true,
-      showEditedSave: true,
-    });
-  }
-});
-
-chrome.storage.onChanged.addListener(async (changes, area) => {
-  if (area === 'local' && changes) {
-    const { showQuickSave, showEditedSave, theme } = changes;
-    const tabs = await chrome.tabs.query({
-      url: getYoutubeVideoTabPattern(''),
-    });
-
-    for (const tab of tabs) {
-      if (showQuickSave) {
-        chrome.tabs.sendMessage(tab.id, {
-          action: 'CONTENT/TOGGLE_QUICK_SAVE',
-          show: showQuickSave.newValue,
-        });
-      }
-      if (showEditedSave) {
-        chrome.tabs.sendMessage(tab.id, {
-          action: 'CONTENT/TOGGLE_EDITED_SAVE',
-          show: showEditedSave.newValue,
-        });
-      }
-      if (theme) {
-        chrome.tabs.sendMessage(tab.id, {
-          action: 'CONTENT/SET_THEME',
-          theme: theme.newValue,
-        });
-      }
+export function runBackground() {
+  chrome.runtime.onInstalled.addListener((details) => {
+    if (details.reason === chrome.runtime.OnInstalledReason.INSTALL) {
+      chrome.storage.local.set({
+        showQuickSave: true,
+        showEditedSave: true,
+      });
     }
-  }
-});
-
-chrome.commands.onCommand.addListener(async (command) => {
-  const [activeVideoTab] = await chrome.tabs.query({
-    active: true,
-    currentWindow: true,
-    url: 'https://*.youtube.com/watch?v=*',
   });
 
-  if (activeVideoTab) {
-    switch (command) {
-      case 'quick-save': {
-        chrome.tabs.sendMessage(activeVideoTab.id, {
-          action: 'CONTENT/QUICK_SAVE',
-        });
-        break;
+  chrome.storage.onChanged.addListener(async (changes, area) => {
+    if (area === 'local' && changes) {
+      const { showQuickSave, showEditedSave, theme } = changes;
+      const tabs = await chrome.tabs.query({
+        url: getYoutubeVideoTabPattern(''),
+      });
+
+      for (const tab of tabs) {
+        if (showQuickSave) {
+          chrome.tabs.sendMessage(tab.id, {
+            action: 'CONTENT/TOGGLE_QUICK_SAVE',
+            show: showQuickSave.newValue,
+          });
+        }
+        if (showEditedSave) {
+          chrome.tabs.sendMessage(tab.id, {
+            action: 'CONTENT/TOGGLE_EDITED_SAVE',
+            show: showEditedSave.newValue,
+          });
+        }
+        if (theme) {
+          chrome.tabs.sendMessage(tab.id, {
+            action: 'CONTENT/SET_THEME',
+            theme: theme.newValue,
+          });
+        }
       }
-      case 'edited-save': {
-        chrome.tabs.sendMessage(activeVideoTab.id, {
-          action: 'CONTENT/EDITED_SAVE',
-        });
-        break;
-      }
-      case 'next-bookmark': {
-        chrome.tabs.sendMessage(activeVideoTab.id, {
-          action: 'CONTENT/NEXT_BOOKMARK',
-        });
-        break;
-      }
-      case 'previous-bookmark': {
-        chrome.tabs.sendMessage(activeVideoTab.id, {
-          action: 'CONTENT/PREVIOUS_BOOKMARK',
-        });
-        break;
-      }
-      default:
-        console.warn('Unknown command:', command);
-        break;
     }
-  }
-});
+  });
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  console.log('sw message', message, sender?.url);
+  chrome.commands.onCommand.addListener(async (command) => {
+    const [activeVideoTab] = await chrome.tabs.query({
+      active: true,
+      currentWindow: true,
+      url: 'https://*.youtube.com/watch?v=*',
+    });
 
-  (async () => {
-    try {
-      const db = await openDatabase();
+    if (activeVideoTab) {
+      switch (command) {
+        case 'quick-save': {
+          chrome.tabs.sendMessage(activeVideoTab.id, {
+            action: 'CONTENT/QUICK_SAVE',
+          });
+          break;
+        }
+        case 'edited-save': {
+          chrome.tabs.sendMessage(activeVideoTab.id, {
+            action: 'CONTENT/EDITED_SAVE',
+          });
+          break;
+        }
+        case 'next-bookmark': {
+          chrome.tabs.sendMessage(activeVideoTab.id, {
+            action: 'CONTENT/NEXT_BOOKMARK',
+          });
+          break;
+        }
+        case 'previous-bookmark': {
+          chrome.tabs.sendMessage(activeVideoTab.id, {
+            action: 'CONTENT/PREVIOUS_BOOKMARK',
+          });
+          break;
+        }
+        default:
+          console.warn('Unknown command:', command);
+          break;
+      }
+    }
+  });
 
-      switch (message.action) {
-        case 'CREATE_BOOKMARK': {
-          try {
-            validateBookmark(message, {
-              bookmarkTitle: {
-                ...BOOKMARK_TITLE_CONSTRAINS,
-                required: !!message.title,
-              },
-              bookmarkNote: BOOKMARK_NOTE_CONSTRAINS,
-              bookmarkColor: { required: !!message.color },
-            });
-            const { video, bookmark } = await createBookmark(db, message);
-            const tabs = await getCurrentVideoTabs(video.videoId);
-            if (tabs.length) {
-              for (const tab of tabs) {
-                chrome.tabs.sendMessage(tab.id, {
-                  action: 'CONTENT/CREATE_BOOKMARKS',
-                  bookmarks: [bookmark],
-                });
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    console.log('sw message', message, sender?.url);
+
+    (async () => {
+      try {
+        const db = await openDatabase();
+
+        switch (message.action) {
+          case 'CREATE_BOOKMARK': {
+            try {
+              validateBookmark(message, {
+                bookmarkTitle: {
+                  ...BOOKMARK_TITLE_CONSTRAINS,
+                  required: !!message.title,
+                },
+                bookmarkNote: BOOKMARK_NOTE_CONSTRAINS,
+                bookmarkColor: { required: !!message.color },
+              });
+              const { video, bookmark } = await createBookmark(db, message);
+              const tabs = await getCurrentVideoTabs(video.videoId);
+              if (tabs.length) {
+                for (const tab of tabs) {
+                  chrome.tabs.sendMessage(tab.id, {
+                    action: 'CONTENT/CREATE_BOOKMARKS',
+                    bookmarks: [bookmark],
+                  });
+                }
               }
+
+              sendResponse({ success: true, video, bookmark });
+            } catch (err) {
+              const errorMessage =
+                err instanceof ValidationError
+                  ? err.message
+                  : 'Failed to create new bookmark';
+              sendResponse({ success: false, error: errorMessage });
             }
+            break;
+          }
+          case 'CREATE_TAG': {
+            try {
+              validateTag(message.tag, {
+                tagTitle: {
+                  ...TAG_TITLE_CONSTRAINS,
+                  required: true,
+                },
+                tagColor: { required: !!message.tag.color },
+              });
+              const { tag } = await createTag(db, message.tag);
+              sendResponse({ success: true, tag });
+            } catch (err) {
+              const errorMessage =
+                err instanceof ValidationError
+                  ? err.message
+                  : 'Failed to create new tag';
+              sendResponse({ success: false, error: errorMessage });
+            }
+            break;
+          }
+          case 'UPDATE_TAG': {
+            const { tag: updTag } = message;
+            try {
+              validateTag(updTag, {
+                tagTitle: {
+                  ...TAG_TITLE_CONSTRAINS,
+                  required: true,
+                },
+                tagColor: { required: !!updTag.color },
+              });
+              const { tag } = await updateTag(db, updTag);
+              sendResponse({ success: true, tag });
+            } catch (err) {
+              const errorMessage =
+                err instanceof ValidationError
+                  ? err.message
+                  : 'Failed to update tag';
+              sendResponse({ success: false, error: errorMessage });
+            }
+            break;
+          }
+          case 'GET_TAGS': {
+            const tags = await getTags(db, { normalized: message?.normalized });
+            sendResponse({ success: true, list: tags });
+            break;
+          }
+          case 'DELETE_TAG': {
+            await deleteTag(db, message.tagId);
+            sendResponse({ success: true });
+            break;
+          }
+          case 'DELETE_TAGS': {
+            await deleteTags(db);
+            sendResponse({ success: true });
+            break;
+          }
+          case 'SET_VIDEO_TAG': {
+            await setVideoTag(db, message.videoId, message.tagId || null);
+            sendResponse({ success: true });
+            break;
+          }
+          case 'GET_VIDEOS_WITH_BOOKMARKS': {
+            const videosWithBookmarks = await getVideosWithBookmarks(db, {
+              topVideoId: message?.topmostVideoId,
+              includeBookmarks: message?.includeBookmarks,
+              normalized: message?.normalized,
+            });
+            sendResponse({ success: true, list: videosWithBookmarks });
+            break;
+          }
+          case 'GET_BOOKMARKS_BY_VIDEO_ID': {
+            const bookmarks = await getBookmarksByVideoId(db, message.videoId, {
+              normalized: message.normalized,
+              order: message.order, // time_asc | new
+            });
+            sendResponse({ success: true, list: bookmarks });
+            break;
+          }
+          case 'GET_BOOKMARK': {
+            const bookmark = await getBookmark(db, message.bookmarkId);
+            sendResponse({ success: true, bookmark });
+            break;
+          }
+          case 'GET_VIDEO': {
+            const video = await getVideo(db, message.videoId);
+            sendResponse({ success: true, video });
+            break;
+          }
+          case 'GET_VIDEOS_TOTAL_COUNT': {
+            const count = await getVideosTotalCount(db);
+            sendResponse({ success: true, count });
+            break;
+          }
+          case 'GET_BOOKMARKS_COUNT_BY_VIDEO_ID': {
+            const count = await getBookmarksPerVideoTotalCount(
+              db,
+              message.videoId,
+            );
+            sendResponse({ success: true, count });
+            break;
+          }
+          case 'UPDATE_BOOKMARK': {
+            const { bookmark: updBookmark } = message;
+            try {
+              validateBookmark(updBookmark, {
+                bookmarkTitle: { ...BOOKMARK_TITLE_CONSTRAINS, required: true },
+                bookmarkNote: BOOKMARK_NOTE_CONSTRAINS,
+                bookmarkColor: { required: true },
+              });
+              const { bookmark } = await updateBookmark(db, updBookmark);
+              const tabs = await getCurrentVideoTabs(bookmark.videoId);
 
-            sendResponse({ success: true, video, bookmark });
-          } catch (err) {
-            const errorMessage =
-              err instanceof ValidationError
-                ? err.message
-                : 'Failed to create new bookmark';
-            sendResponse({ success: false, error: errorMessage });
-          }
-          break;
-        }
-        case 'CREATE_TAG': {
-          try {
-            validateTag(message.tag, {
-              tagTitle: {
-                ...TAG_TITLE_CONSTRAINS,
-                required: true,
-              },
-              tagColor: { required: !!message.tag.color },
-            });
-            const { tag } = await createTag(db, message.tag);
-            sendResponse({ success: true, tag });
-          } catch (err) {
-            const errorMessage =
-              err instanceof ValidationError
-                ? err.message
-                : 'Failed to create new tag';
-            sendResponse({ success: false, error: errorMessage });
-          }
-          break;
-        }
-        case 'UPDATE_TAG': {
-          const { tag: updTag } = message;
-          try {
-            validateTag(updTag, {
-              tagTitle: {
-                ...TAG_TITLE_CONSTRAINS,
-                required: true,
-              },
-              tagColor: { required: !!updTag.color },
-            });
-            const { tag } = await updateTag(db, updTag);
-            sendResponse({ success: true, tag });
-          } catch (err) {
-            const errorMessage =
-              err instanceof ValidationError
-                ? err.message
-                : 'Failed to update tag';
-            sendResponse({ success: false, error: errorMessage });
-          }
-          break;
-        }
-        case 'GET_TAGS': {
-          const tags = await getTags(db, { normalized: message?.normalized });
-          sendResponse({ success: true, list: tags });
-          break;
-        }
-        case 'DELETE_TAG': {
-          await deleteTag(db, message.tagId);
-          sendResponse({ success: true });
-          break;
-        }
-        case 'DELETE_TAGS': {
-          await deleteTags(db);
-          sendResponse({ success: true });
-          break;
-        }
-        case 'SET_VIDEO_TAG': {
-          await setVideoTag(db, message.videoId, message.tagId || null);
-          sendResponse({ success: true });
-          break;
-        }
-        case 'GET_VIDEOS_WITH_BOOKMARKS': {
-          const videosWithBookmarks = await getVideosWithBookmarks(db, {
-            topVideoId: message?.topmostVideoId,
-            includeBookmarks: message?.includeBookmarks,
-            normalized: message?.normalized,
-          });
-          sendResponse({ success: true, list: videosWithBookmarks });
-          break;
-        }
-        case 'GET_BOOKMARKS_BY_VIDEO_ID': {
-          const bookmarks = await getBookmarksByVideoId(db, message.videoId, {
-            normalized: message.normalized,
-            order: message.order, // time_asc | new
-          });
-          sendResponse({ success: true, list: bookmarks });
-          break;
-        }
-        case 'GET_BOOKMARK': {
-          const bookmark = await getBookmark(db, message.bookmarkId);
-          sendResponse({ success: true, bookmark });
-          break;
-        }
-        case 'GET_VIDEO': {
-          const video = await getVideo(db, message.videoId);
-          sendResponse({ success: true, video });
-          break;
-        }
-        case 'GET_VIDEOS_TOTAL_COUNT': {
-          const count = await getVideosTotalCount(db);
-          sendResponse({ success: true, count });
-          break;
-        }
-        case 'GET_BOOKMARKS_COUNT_BY_VIDEO_ID': {
-          const count = await getBookmarksPerVideoTotalCount(
-            db,
-            message.videoId,
-          );
-          sendResponse({ success: true, count });
-          break;
-        }
-        case 'UPDATE_BOOKMARK': {
-          const { bookmark: updBookmark } = message;
-          try {
-            validateBookmark(updBookmark, {
-              bookmarkTitle: { ...BOOKMARK_TITLE_CONSTRAINS, required: true },
-              bookmarkNote: BOOKMARK_NOTE_CONSTRAINS,
-              bookmarkColor: { required: true },
-            });
-            const { bookmark } = await updateBookmark(db, updBookmark);
-            const tabs = await getCurrentVideoTabs(bookmark.videoId);
-
-            if (tabs.length) {
-              for (const tab of tabs) {
-                chrome.tabs.sendMessage(tab.id, {
-                  action: 'CONTENT/UPDATE_BOOKMARK',
-                  bookmark: bookmark,
-                });
+              if (tabs.length) {
+                for (const tab of tabs) {
+                  chrome.tabs.sendMessage(tab.id, {
+                    action: 'CONTENT/UPDATE_BOOKMARK',
+                    bookmark: bookmark,
+                  });
+                }
               }
+
+              sendResponse({ success: true, bookmark: bookmark });
+            } catch (err) {
+              const errorMessage =
+                err instanceof ValidationError
+                  ? err.message
+                  : 'Failed to update bookmark';
+              sendResponse({ success: false, error: errorMessage });
             }
-
-            sendResponse({ success: true, bookmark: bookmark });
-          } catch (err) {
-            const errorMessage =
-              err instanceof ValidationError
-                ? err.message
-                : 'Failed to update bookmark';
-            sendResponse({ success: false, error: errorMessage });
+            break;
           }
-          break;
-        }
-        case 'SAVE_VIDEO_LOOP': {
-          await saveVideoLoop(
-            db,
-            message.videoId,
-            message.loopStartId,
-            message.loopEndId,
-          );
-          const tabs = await getCurrentVideoTabs(message.videoId);
+          case 'SAVE_VIDEO_LOOP': {
+            await saveVideoLoop(
+              db,
+              message.videoId,
+              message.loopStartId,
+              message.loopEndId,
+            );
+            const tabs = await getCurrentVideoTabs(message.videoId);
 
-          for (const tab of tabs) {
-            chrome.tabs.sendMessage(tab.id, {
-              action: 'CONTENT/SET_VIDEO_LOOP',
-              videoId: message.videoId,
-              loopStartId: message.loopStartId,
-              loopEndId: message.loopEndId,
-            });
-          }
-
-          sendResponse({ success: true });
-          break;
-        }
-        case 'DELETE_VIDEO_LOOP': {
-          await deleteVideoLoop(db, message.videoId);
-          const tabs = await getCurrentVideoTabs(message.videoId);
-
-          for (const tab of tabs) {
-            chrome.tabs.sendMessage(tab.id, {
-              action: 'CONTENT/REMOVE_VIDEO_LOOP',
-            });
-          }
-
-          sendResponse({ success: true });
-          break;
-        }
-        case 'DELETE_BOOKMARK': {
-          const { videoId } = await deleteBookmark(db, message.bookmarkId);
-          const tabs = await getCurrentVideoTabs(videoId);
-
-          if (tabs.length) {
             for (const tab of tabs) {
               chrome.tabs.sendMessage(tab.id, {
-                action: 'CONTENT/DELETE_BOOKMARK',
-                bookmarkId: message.bookmarkId,
+                action: 'CONTENT/SET_VIDEO_LOOP',
+                videoId: message.videoId,
+                loopStartId: message.loopStartId,
+                loopEndId: message.loopEndId,
               });
             }
+
+            sendResponse({ success: true });
+            break;
           }
+          case 'DELETE_VIDEO_LOOP': {
+            await deleteVideoLoop(db, message.videoId);
+            const tabs = await getCurrentVideoTabs(message.videoId);
 
-          sendResponse({ success: true });
-          break;
-        }
-        case 'DELETE_BOOKMARKS_BY_VIDEO_ID': {
-          await deleteBookmarksByVideoId(db, message.videoId);
-          const tabs = await getCurrentVideoTabs(message.videoId);
-
-          if (tabs.length) {
             for (const tab of tabs) {
               chrome.tabs.sendMessage(tab.id, {
-                action: 'CONTENT/DELETE_ALL_BOOKMARKS',
+                action: 'CONTENT/REMOVE_VIDEO_LOOP',
               });
             }
+
+            sendResponse({ success: true });
+            break;
           }
-
-          sendResponse({ success: true });
-          break;
-        }
-        case 'DELETE_VIDEO': {
-          const { videoId } = message;
-          await deleteVideo(db, videoId);
-          const tabs = await getCurrentVideoTabs(videoId);
-
-          if (tabs.length) {
-            for (const tab of tabs) {
-              chrome.tabs.sendMessage(tab.id, {
-                action: 'CONTENT/DELETE_ALL_BOOKMARKS',
-              });
-            }
-          }
-
-          sendResponse({ success: true });
-          break;
-        }
-        case 'RESET': {
-          const videoIds = await resetData(db);
-          const tabs = await getCurrentVideoTabs(...videoIds);
-
-          if (tabs.length) {
-            for (const tab of tabs) {
-              chrome.tabs.sendMessage(tab.id, {
-                action: 'CONTENT/DELETE_ALL_BOOKMARKS',
-              });
-            }
-          }
-
-          sendResponse({ success: true });
-          break;
-        }
-        case 'EXPORT_DATA': {
-          const videosWithBookmarks = await getVideosWithBookmarks(db);
-          const tags = await getTags(db);
-
-          for (const video of videosWithBookmarks) {
-            delete video.loopStartId;
-            delete video.loopEndId;
-          }
-
-          sendResponse({
-            success: true,
-            data: {
-              version: DATA_VERSION,
-              exportedAt: new Date().toISOString(),
-              videos: videosWithBookmarks,
-              tags,
-            },
-          });
-          break;
-        }
-        case 'IMPORT_DATA': {
-          try {
-            validateImportedData(message.data, DATA_VERSION, {
-              videoTitle: VIDEO_TITLE_CONSTRAINS,
-              bookmarkTitle: BOOKMARK_TITLE_CONSTRAINS,
-              bookmarkNote: BOOKMARK_NOTE_CONSTRAINS,
-              tagTitle: TAG_TITLE_CONSTRAINS,
-            });
-            await importData(db, message.data);
-            const videoIds = message.data.videos.map((v) => v.videoId);
-            const tabs = await getCurrentVideoTabs(...videoIds);
+          case 'DELETE_BOOKMARK': {
+            const { videoId } = await deleteBookmark(db, message.bookmarkId);
+            const tabs = await getCurrentVideoTabs(videoId);
 
             if (tabs.length) {
               for (const tab of tabs) {
                 chrome.tabs.sendMessage(tab.id, {
-                  action: 'CONTENT/REFRESH_BOOKMARKS',
+                  action: 'CONTENT/DELETE_BOOKMARK',
+                  bookmarkId: message.bookmarkId,
                 });
               }
             }
 
             sendResponse({ success: true });
-          } catch (error) {
-            console.error(error);
-            const errorMessage =
-              error instanceof ValidationError
-                ? error.message
-                : 'Failed to import data';
-            sendResponse({ success: false, error: errorMessage });
+            break;
           }
+          case 'DELETE_BOOKMARKS_BY_VIDEO_ID': {
+            await deleteBookmarksByVideoId(db, message.videoId);
+            const tabs = await getCurrentVideoTabs(message.videoId);
 
-          break;
+            if (tabs.length) {
+              for (const tab of tabs) {
+                chrome.tabs.sendMessage(tab.id, {
+                  action: 'CONTENT/DELETE_ALL_BOOKMARKS',
+                });
+              }
+            }
+
+            sendResponse({ success: true });
+            break;
+          }
+          case 'DELETE_VIDEO': {
+            const { videoId } = message;
+            await deleteVideo(db, videoId);
+            const tabs = await getCurrentVideoTabs(videoId);
+
+            if (tabs.length) {
+              for (const tab of tabs) {
+                chrome.tabs.sendMessage(tab.id, {
+                  action: 'CONTENT/DELETE_ALL_BOOKMARKS',
+                });
+              }
+            }
+
+            sendResponse({ success: true });
+            break;
+          }
+          case 'RESET': {
+            const videoIds = await resetData(db);
+            const tabs = await getCurrentVideoTabs(...videoIds);
+
+            if (tabs.length) {
+              for (const tab of tabs) {
+                chrome.tabs.sendMessage(tab.id, {
+                  action: 'CONTENT/DELETE_ALL_BOOKMARKS',
+                });
+              }
+            }
+
+            sendResponse({ success: true });
+            break;
+          }
+          case 'EXPORT_DATA': {
+            const videosWithBookmarks = await getVideosWithBookmarks(db);
+            const tags = await getTags(db);
+
+            for (const video of videosWithBookmarks) {
+              delete video.loopStartId;
+              delete video.loopEndId;
+            }
+
+            sendResponse({
+              success: true,
+              data: {
+                version: DATA_VERSION,
+                exportedAt: new Date().toISOString(),
+                videos: videosWithBookmarks,
+                tags,
+              },
+            });
+            break;
+          }
+          case 'IMPORT_DATA': {
+            try {
+              validateImportedData(message.data, DATA_VERSION, {
+                videoTitle: VIDEO_TITLE_CONSTRAINS,
+                bookmarkTitle: BOOKMARK_TITLE_CONSTRAINS,
+                bookmarkNote: BOOKMARK_NOTE_CONSTRAINS,
+                tagTitle: TAG_TITLE_CONSTRAINS,
+              });
+              await importData(db, message.data);
+              const videoIds = message.data.videos.map((v) => v.videoId);
+              const tabs = await getCurrentVideoTabs(...videoIds);
+
+              if (tabs.length) {
+                for (const tab of tabs) {
+                  chrome.tabs.sendMessage(tab.id, {
+                    action: 'CONTENT/REFRESH_BOOKMARKS',
+                  });
+                }
+              }
+
+              sendResponse({ success: true });
+            } catch (error) {
+              console.error(error);
+              const errorMessage =
+                error instanceof ValidationError
+                  ? error.message
+                  : 'Failed to import data';
+              sendResponse({ success: false, error: errorMessage });
+            }
+
+            break;
+          }
+          default:
+            console.warn('Unknown action:', message.action);
         }
-        default:
-          console.warn('Unknown action:', message.action);
+      } catch (err) {
+        console.error('Messages listener error:', err?.message);
       }
-    } catch (err) {
-      console.error('Messages listener error:', err?.message);
-    }
-  })();
+    })();
 
-  return true;
-});
+    return true;
+  });
+}
 
 function openDatabase() {
   return new Promise((resolve, reject) => {
