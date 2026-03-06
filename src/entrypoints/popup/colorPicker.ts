@@ -1,4 +1,4 @@
-import { colors } from './popupUtils.js';
+import { COLORS as colors } from '@/shared';
 
 export function setupColorPicker() {
   const $form = document.getElementById('color-picker-form');

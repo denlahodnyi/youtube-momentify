@@ -8,6 +8,15 @@ import {
   type Theme,
   type Video,
 } from '@/api';
+import { BOOKMARK_TITLE_CONSTRAINS, COLORS, formatTime } from '@/shared';
+import {
+  getVideoIdFromUrl,
+  getVideoTitle,
+  createDomElement,
+  resolveTheme,
+  applyTheme,
+} from './contentUtils';
+import type { ContentRendererEvent, State } from './contentTypes';
 import './content.css';
 
 const chrome = browser;
@@ -16,117 +25,6 @@ const QUICK_SAVE_BTN_ID = 'momentify-save-bookmark-btn';
 const SAVE_WITH_EDIT_BTN_ID = 'momentify-save-with-edit-bookmark-btn';
 const TIMESTAMPS_OUTER_CONTAINER_ID = 'momentify-bar';
 const TIMESTAMPS_INNER_CONTAINER_ID = 'momentify-bookmarks-container';
-const BOOKMARK_TITLE_CONSTRAINS = { min: 1, max: 80 };
-
-type ContentRendererEvent =
-  | {
-      type: 'ui/apply_video_loop';
-      payload: { loopStartId: string; loopEndId: string; videoId: string };
-    }
-  | {
-      type: 'ui/remove_video_loop';
-      payload?: never;
-    }
-  | {
-      type: 'ui/manage_loop';
-      payload: {
-        bookmarkId: Bookmark['id'];
-        action: 'start' | 'finish' | 'delete';
-      };
-    }
-  | {
-      type: 'api/save_loop';
-      payload: {
-        loopStartId: Bookmark['id'];
-        loopEndId: Bookmark['id'];
-      };
-    }
-  | {
-      type: 'api/delete_loop';
-      payload: {
-        bookmarkId: Bookmark['id'];
-      };
-    }
-  | {
-      type: 'ui/toggle_quick_save';
-      payload: { show: boolean };
-    }
-  | {
-      type: 'ui/toggle_edited_save';
-      payload: { show: boolean };
-    }
-  | {
-      type: 'api/save_bookmark';
-      payload?: { title: string; color: string; time: number };
-    }
-  | {
-      type: 'api/update_bookmark';
-      payload: { bookmark: Bookmark };
-    }
-  | {
-      type: 'ui/open_bookmark_details';
-      payload: { bookmarkId: Bookmark['id'] };
-    }
-  | {
-      type: 'ui/open_bookmark_edit_modal';
-      payload:
-        | { isNewBookmark: true }
-        | { isNewBookmark: false; bookmarkId: Bookmark['id'] };
-    }
-  | {
-      type: 'ui/to_next_bookmark';
-      payload?: never;
-    }
-  | {
-      type: 'ui/to_prev_bookmark';
-      payload?: never;
-    }
-  | {
-      type: 'ui/play_video';
-      payload: { time: number };
-    }
-  | {
-      type: 'ui/render_bookmarks';
-      payload: { bookmarks: Bookmark[] };
-    }
-  | {
-      type: 'ui/refresh_bookmarks';
-      payload?: never;
-    }
-  | {
-      type: 'ui/update_bookmark';
-      payload: { bookmark: Bookmark };
-    }
-  | {
-      type: 'ui/delete_bookmark';
-      payload: { bookmarkId: Bookmark['id'] };
-    }
-  | {
-      type: 'api/delete_bookmark';
-      payload: { bookmarkId: Bookmark['id'] };
-    }
-  | {
-      type: 'ui/delete_all_bookmarks';
-      payload?: never;
-    }
-  | {
-      type: 'ui/set_theme';
-      payload: { theme: Theme };
-    };
-
-interface State {
-  videoId: string | null;
-  videoDuration: number;
-  loopStartTime: number;
-  loopEndTime: number;
-  bookmarks: {
-    byId: Map<Bookmark['id'], Bookmark>;
-    ids: Bookmark['id'][];
-    suspended: Bookmark['id'][];
-  };
-  video: Video | null;
-  tempLoopStartId: Bookmark['id'] | null;
-}
 
 class ContentRenderer {
   state: State = {
@@ -1486,17 +1384,6 @@ class MarkPopup {
 }
 
 class BookmarkEditModal {
-  static colors = {
-    'Kiwi Pulp': '#9CEF43'.toLowerCase(),
-    'Deep Sky Blue': '#00bfff'.toLowerCase(),
-    'Bright Indigo': '#6F00FE'.toLowerCase(),
-    Clover: '#008F00'.toLowerCase(),
-    Azul: '#1D5DEC'.toLowerCase(),
-    'Peach Damask': '#F6C4A6'.toLowerCase(),
-    'Distilled Rose': '#FFBBFF'.toLowerCase(),
-    'Banana King': '#FFFB08'.toLowerCase(),
-  };
-
   state:
     | { bookmark: Partial<Bookmark> & { time: Bookmark['time'] }; isNew: true }
     | { bookmark: Bookmark; isNew: false } = {
@@ -1546,25 +1433,21 @@ class BookmarkEditModal {
       </dialog>
     `);
 
-    const colorOptions = Object.entries(BookmarkEditModal.colors).map(
-      ([color, hex]) => {
-        const $colorOption = this.dom
-          .querySelector<HTMLTemplateElement>(
-            '#momentify-color-picker-template',
-          )
-          ?.content.firstElementChild?.cloneNode(true) as HTMLElement;
-        $colorOption.style.backgroundColor = hex;
-        const $colorName = $colorOption.querySelector<HTMLElement>(
-          '[data-component="color-picker-item-name"]',
-        );
-        if ($colorName) $colorName.style.backgroundColor = color;
-        const $colorInput = $colorOption.querySelector<HTMLInputElement>(
-          '[data-component="color-picker-item-input"]',
-        );
-        if ($colorInput) $colorInput.value = hex;
-        return $colorOption;
-      },
-    );
+    const colorOptions = Object.entries(COLORS).map(([color, hex]) => {
+      const $colorOption = this.dom
+        .querySelector<HTMLTemplateElement>('#momentify-color-picker-template')
+        ?.content.firstElementChild?.cloneNode(true) as HTMLElement;
+      $colorOption.style.backgroundColor = hex;
+      const $colorName = $colorOption.querySelector<HTMLElement>(
+        '[data-component="color-picker-item-name"]',
+      );
+      if ($colorName) $colorName.style.backgroundColor = color;
+      const $colorInput = $colorOption.querySelector<HTMLInputElement>(
+        '[data-component="color-picker-item-input"]',
+      );
+      if ($colorInput) $colorInput.value = hex;
+      return $colorOption;
+    });
 
     this.dom
       .querySelector('[data-component="color-picker"]')
@@ -1616,9 +1499,7 @@ class BookmarkEditModal {
       if ($chars)
         $chars.textContent = state.bookmark.title?.length.toString() ?? '0';
       const isAvailableColor = state.bookmark.color
-        ? Object.values(BookmarkEditModal.colors).includes(
-            state.bookmark.color.toLowerCase(),
-          )
+        ? Object.values(COLORS).includes(state.bookmark.color.toLowerCase())
         : false;
       this.dom
         .querySelectorAll<HTMLInputElement>(
@@ -1862,60 +1743,3 @@ chrome.runtime.onMessage.addListener(async (message: ContentTypedMessage) => {
       console.warn('[momentify] Unknown action:', message);
   }
 });
-
-function getVideoTitle() {
-  return document.title.split(' - YouTube')[0];
-}
-
-function getVideoIdFromUrl(url: string) {
-  const params = getVideoPageUrlParams(url);
-  return params?.videoId || null;
-}
-
-function getVideoPageUrlParams(url: string) {
-  const videoPagePattern = new URLPattern({
-    baseURL: 'https://www.youtube.com',
-    pathname: '/watch',
-  });
-
-  if (videoPagePattern.test(url)) {
-    const urlObj = new URL(url);
-    const videoId = urlObj.searchParams.get('v');
-    const time =
-      urlObj.searchParams.get('t') ?? urlObj.searchParams.get('start');
-
-    return { videoId, time };
-  }
-}
-
-function createDomElement<TElement extends Element>(html: string): TElement {
-  const dom = new DOMParser().parseFromString(html, 'text/html');
-  return dom.body.firstElementChild as TElement;
-}
-
-function formatTime(timeInSec: number) {
-  const seconds = Math.max(0, Math.floor(timeInSec));
-
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = seconds % 60;
-
-  if (h > 0) {
-    return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  }
-
-  return `${m}:${String(s).padStart(2, '0')}`;
-}
-
-function resolveTheme(mode: Theme) {
-  if (mode === 'system') {
-    return matchMedia('(prefers-color-scheme: dark)').matches
-      ? 'dark'
-      : 'light';
-  }
-  return mode;
-}
-
-function applyTheme(mode: Exclude<Theme, 'system'>) {
-  document.documentElement.dataset.momentifyTheme = mode;
-}

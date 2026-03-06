@@ -1,23 +1,4 @@
-import type { Backup, Video } from '@/api';
-
-const chrome = browser;
-
-export function getYoutubeVideoTabPattern(videoId: Video['videoId']) {
-  return `https://*.youtube.com/watch?v=${videoId}*`;
-}
-
-export async function getCurrentVideoTabs(
-  videoId: Video['videoId'],
-  ...ids: Video['videoId'][]
-) {
-  const tabs = await chrome.tabs.query({
-    url: [
-      getYoutubeVideoTabPattern(videoId),
-      ...(ids.length ? ids.map(getYoutubeVideoTabPattern) : []),
-    ],
-  });
-  return tabs;
-}
+import type { Backup } from '@/api';
 
 export function validateHex(color: string) {
   return /^#([a-f0-9]{6}|[a-f0-9]{3})$/i.test(color);

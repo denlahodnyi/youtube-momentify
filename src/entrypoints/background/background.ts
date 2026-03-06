@@ -1,12 +1,3 @@
-import type { Commands } from '@/types.js';
-import {
-  getCurrentVideoTabs,
-  getYoutubeVideoTabPattern,
-  validateBookmark,
-  validateImportedData,
-  validateTag,
-  ValidationError,
-} from './backgroundUtils.js';
 import {
   typedMessage,
   type BackgroundTypedMessage,
@@ -14,23 +5,38 @@ import {
   type Bookmark,
   type CreateBookmark,
   type CreateTag,
-  type MessagePayload,
   type Tag,
   type Video,
 } from '@/api/index.js';
+import {
+  DEFAULT_MARK_COLOR,
+  VIDEO_TITLE_CONSTRAINS,
+  BOOKMARK_TITLE_CONSTRAINS,
+  BOOKMARK_NOTE_CONSTRAINS,
+  TAG_TITLE_CONSTRAINS,
+  getCurrentVideoTabs,
+  getYoutubeVideoTabPattern,
+} from '@/shared';
+import {
+  validateBookmark,
+  validateImportedData,
+  validateTag,
+  ValidationError,
+} from './backgroundUtils.js';
 
 const chrome = browser;
 
-const DEFAULT_MARK_COLOR = '#00bfff';
 const BOOKMARKS_BY_VIDEO_ID_IDX = 'bookmarks_idx/by_videoId';
 const VIDEOS_BY_CREATED_AT_IDX = 'videos_idx/by_createdAt';
 const VIDEOS_BY_TAG_IDX = 'videos_idx/by_tag';
-const VIDEO_TITLE_CONSTRAINS = { min: 1, max: 100 };
-const BOOKMARK_TITLE_CONSTRAINS = { min: 1, max: 80 };
-const BOOKMARK_NOTE_CONSTRAINS = { min: 0, max: 200 };
-const TAG_TITLE_CONSTRAINS = { min: 1, max: 20 };
 const DATA_VERSION = 1;
 const DB_VERSION = 1;
+
+export type Commands =
+  | 'quick-save'
+  | 'edited-save'
+  | 'next-bookmark'
+  | 'previous-bookmark';
 
 export function runBackground() {
   chrome.runtime.onInstalled.addListener((details) => {
