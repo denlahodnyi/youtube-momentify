@@ -77,12 +77,10 @@ export default class HomePage {
   }
 
   async fetchVideosData() {
-    if (this.state.videoId) {
-      const result = await this.services.getVideos(this.state.videoId);
-      if (result.success && result.normalized) {
-        this.state.videos.byId = new Map(result.list.byId);
-        this.state.videos.ids = result.list.ids;
-      }
+    const result = await this.services.getVideos(this.state.videoId);
+    if (result.success && result.normalized) {
+      this.state.videos.byId = new Map(result.list.byId);
+      this.state.videos.ids = result.list.ids;
     }
   }
 
