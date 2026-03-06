@@ -1,17 +1,24 @@
-import {
-  applyTheme,
-  getAppliedTheme,
-  getSavedTheme,
-  resolveTheme,
-  saveTheme,
-} from './popupUtils.js';
+import type { Theme } from '@/api/index.js';
+import { applyTheme, resolveTheme, saveTheme } from './popupUtils.js';
+import type Services from './services.js';
 
 const chrome = browser;
 
+interface State {
+  settings: {
+    showEditedSave: boolean;
+    showQuickSave: boolean;
+    theme: Theme;
+  };
+  shortcuts: globalThis.Browser.commands.Command[];
+  settingsEarlyRequest: Promise<void> | null;
+  shortcutsEarlyRequest: Promise<void> | null;
+}
+
 export default class SettingsPage {
-  services;
-  onNavigate;
-  state = {
+  services: typeof Services;
+  onNavigate?: () => void;
+  state: State = {
     settings: {
       showEditedSave: false,
       showQuickSave: false,
@@ -22,19 +29,20 @@ export default class SettingsPage {
     shortcutsEarlyRequest: null,
   };
 
-  constructor({ Services }) {
+  constructor(args: { Services: typeof Services }) {
+    const { Services } = args;
     this.services = Services;
     this.state.settingsEarlyRequest = this.fetchSettings();
     this.state.shortcutsEarlyRequest = this.fetchShortcuts();
   }
 
-  render($container) {
+  render($container: HTMLElement) {
     this.renderPageLayout($container);
-    this.state.settingsEarlyRequest.then(() => {
+    this.state.settingsEarlyRequest?.then(() => {
       this.renderContentSettings();
       this.prepareThemeSwitcher();
     });
-    this.state.shortcutsEarlyRequest.then(() => {
+    this.state.shortcutsEarlyRequest?.then(() => {
       this.renderShortcutsSection();
     });
     this.renderImportExport();
@@ -42,11 +50,11 @@ export default class SettingsPage {
   }
 
   async fetchSettings() {
-    const settings = await chrome.storage.local.get([
-      'showEditedSave',
-      'showQuickSave',
-      'theme',
-    ]);
+    const settings = await chrome.storage.local.get<{
+      showEditedSave: boolean;
+      showQuickSave: boolean;
+      theme: Theme;
+    }>(['showEditedSave', 'showQuickSave', 'theme']);
     this.state.settings = settings;
   }
 
@@ -55,24 +63,34 @@ export default class SettingsPage {
     this.state.shortcuts = commands;
   }
 
-  renderPageLayout($container) {
-    const $tmpl = document.getElementById('settings-template');
-    $container.append($tmpl.content.cloneNode(true));
-    document.getElementById('home-link').addEventListener('click', () => {
-      this.onNavigate?.();
-    });
+  renderPageLayout($container: HTMLElement) {
+    const $tmpl = document.getElementById(
+      'settings-template',
+    ) as HTMLTemplateElement | null;
+    if ($tmpl) {
+      $container.append($tmpl.content.cloneNode(true));
+      document.getElementById('home-link')?.addEventListener('click', () => {
+        this.onNavigate?.();
+      });
+    }
   }
 
   async renderContentSettings() {
     const { showEditedSave, showQuickSave } = this.state.settings;
-    const $form = document.getElementById('content-settings-form');
-    const $quickSaveInput = document.getElementById('quick-save-input');
+    const $form = document.getElementById(
+      'content-settings-form',
+    ) as HTMLFormElement | null;
+    const $quickSaveInput = document.getElementById(
+      'quick-save-input',
+    ) as HTMLInputElement | null;
     const $quickSaveSwitch = document.getElementById('quick-save-switch');
-    const $editedSaveInput = document.getElementById('edited-save-input');
+    const $editedSaveInput = document.getElementById(
+      'edited-save-input',
+    ) as HTMLInputElement | null;
     const $editedSaveSwitch = document.getElementById('edited-save-switch');
 
     if ($quickSaveSwitch && $quickSaveInput) {
-      $quickSaveSwitch.ariaChecked = showQuickSave;
+      $quickSaveSwitch.ariaChecked = showQuickSave + '';
       $quickSaveInput.checked = showQuickSave;
       $quickSaveSwitch.addEventListener('click', (e) => {
         $quickSaveSwitch.setAttribute(
@@ -87,7 +105,7 @@ export default class SettingsPage {
       });
     }
     if ($editedSaveSwitch && $editedSaveInput) {
-      $editedSaveSwitch.ariaChecked = showEditedSave;
+      $editedSaveSwitch.ariaChecked = showEditedSave + '';
       $editedSaveInput.checked = showEditedSave;
       $editedSaveSwitch.addEventListener('click', (e) => {
         $editedSaveSwitch.setAttribute(
@@ -103,22 +121,24 @@ export default class SettingsPage {
     }
     if ($form) {
       $form.addEventListener('change', async (e) => {
-        const data = new FormData(e.currentTarget);
-        const showQuickSave = data.get('quick-save');
-        const showEditedSave = data.get('edited-save');
-        await chrome.storage.local.set({
-          showQuickSave: showQuickSave === 'on',
-          showEditedSave: showEditedSave === 'on',
-        });
-        this.state.settings.showQuickSave = showQuickSave === 'on';
-        this.state.settings.showEditedSave = showEditedSave === 'on';
+        if (e.currentTarget instanceof HTMLFormElement) {
+          const data = new FormData(e.currentTarget);
+          const showQuickSave = data.get('quick-save');
+          const showEditedSave = data.get('edited-save');
+          await chrome.storage.local.set({
+            showQuickSave: showQuickSave === 'on',
+            showEditedSave: showEditedSave === 'on',
+          });
+          this.state.settings.showQuickSave = showQuickSave === 'on';
+          this.state.settings.showEditedSave = showEditedSave === 'on';
+        }
       });
     }
   }
 
   async renderShortcutsSection() {
     const $link = document.getElementById('shortcuts-link');
-    $link.addEventListener('click', () => {
+    $link?.addEventListener('click', () => {
       chrome.tabs.create({
         url: 'chrome://extensions/shortcuts',
         active: true,
@@ -127,24 +147,30 @@ export default class SettingsPage {
 
     if (this.state.shortcuts.length) {
       const $shortcutsList = document.getElementById('shortcuts');
-      const $shortcutsTmpl = document.getElementById('shortcut-template');
+      const $shortcutsTmpl = document.getElementById(
+        'shortcut-template',
+      ) as HTMLTemplateElement | null;
 
-      for (const { shortcut, description } of this.state.shortcuts) {
-        if (shortcut && description) {
-          const $shortcut = $shortcutsTmpl.content.cloneNode(true);
-          $shortcut
-            .querySelector('[data-component="shortcut"]')
-            .insertAdjacentHTML(
+      if ($shortcutsList && $shortcutsTmpl) {
+        for (const { shortcut, description } of this.state.shortcuts) {
+          if (shortcut && description) {
+            const $shortcut = $shortcutsTmpl.content.cloneNode(
+              true,
+            ) as HTMLElement;
+            const $sh = $shortcut.querySelector('[data-component="shortcut"]');
+            $sh?.insertAdjacentHTML(
               'afterbegin',
               shortcut
                 .split('')
                 .map((sh) => `<kbd>${sh}</kbd>`)
                 .join(''),
             );
-          $shortcut.querySelector(
-            '[data-component="shortcut-desc"]',
-          ).textContent = description;
-          $shortcutsList.append($shortcut);
+            const $desc = $shortcut.querySelector(
+              '[data-component="shortcut-desc"]',
+            );
+            if ($desc) $desc.textContent = description;
+            $shortcutsList.append($shortcut);
+          }
         }
       }
     }
@@ -170,20 +196,24 @@ export default class SettingsPage {
 
     const $importInput = document.getElementById('import-action');
     $importInput?.addEventListener('change', async (e) => {
-      const file = e.target.files[0];
+      const file = (e.target as HTMLInputElement).files?.[0];
       if (file) {
         const reader = new FileReader();
         reader.onload = async (event) => {
           try {
-            const data = JSON.parse(event.target.result);
+            const readFile = event.target?.result;
+            if (!readFile || typeof readFile !== 'string') {
+              throw new Error('Invalid file');
+            }
+            const data = JSON.parse(readFile);
             const result = await this.services.importData(data);
             const $alert = document.getElementById('import-alert');
 
-            if (result.success) {
-              $alert.dataset.success = true;
+            if ($alert && result.success) {
+              $alert.dataset.success = 'true';
               $alert.textContent = 'Data imported successfully!';
-            } else {
-              $alert.dataset.error = true;
+            } else if ($alert && !result.success) {
+              $alert.dataset.error = 'true';
               $alert.textContent = result.error;
             }
           } catch (err) {
@@ -198,23 +228,25 @@ export default class SettingsPage {
   renderResetDataSection() {
     document
       .getElementById('reset-alert-confirm-button')
-      .addEventListener('click', async () => {
+      ?.addEventListener('click', async () => {
         const result = await this.services.resetData();
-        if (result.success) {
-          document.getElementById('reset-alert-message').dataset.success = true;
-          document.getElementById('reset-alert-message').textContent =
-            'Success!';
-        } else {
-          document.getElementById('reset-alert-message').dataset.error = true;
-          document.getElementById('reset-alert-message').textContent =
-            'Something went wrong!';
+        const $alert = document.getElementById(
+          'reset-alert-message',
+        ) as HTMLElement | null;
+
+        if ($alert) {
+          if (result.success) $alert.dataset.success = true + '';
+          else $alert.dataset.error = true + '';
+          $alert.textContent = result.success
+            ? 'Success!'
+            : 'Something went wrong!';
         }
       });
   }
 
   checkThemeOption(theme = 'theme') {
     document
-      .querySelectorAll('[data-component="theme-input"]')
+      .querySelectorAll<HTMLInputElement>('[data-component="theme-input"]')
       .forEach(($input) => {
         if ($input.value === theme) $input.checked = true;
       });
@@ -224,11 +256,13 @@ export default class SettingsPage {
     this.checkThemeOption(this.state.settings.theme);
     document
       .getElementById('theme-switcher')
-      .addEventListener('change', async (e) => {
-        const themeMode = new FormData(e.currentTarget).get('theme');
-        await saveTheme(themeMode);
-        applyTheme(resolveTheme(themeMode));
-        this.state.settings.theme = themeMode;
+      ?.addEventListener('change', async (e) => {
+        if (e.currentTarget instanceof HTMLFormElement) {
+          const themeMode = new FormData(e.currentTarget).get('theme') as Theme;
+          await saveTheme(themeMode);
+          applyTheme(resolveTheme(themeMode));
+          this.state.settings.theme = themeMode;
+        }
       });
   }
 }

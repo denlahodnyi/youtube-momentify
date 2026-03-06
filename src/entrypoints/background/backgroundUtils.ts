@@ -1,10 +1,15 @@
+import type { Backup, Video } from '@/api';
+
 const chrome = browser;
 
-export function getYoutubeVideoTabPattern(videoId) {
+export function getYoutubeVideoTabPattern(videoId: Video['videoId']) {
   return `https://*.youtube.com/watch?v=${videoId}*`;
 }
 
-export async function getCurrentVideoTabs(videoId, ...ids) {
+export async function getCurrentVideoTabs(
+  videoId: Video['videoId'],
+  ...ids: Video['videoId'][]
+) {
   const tabs = await chrome.tabs.query({
     url: [
       getYoutubeVideoTabPattern(videoId),
@@ -14,19 +19,27 @@ export async function getCurrentVideoTabs(videoId, ...ids) {
   return tabs;
 }
 
-export function validateHex(color) {
+export function validateHex(color: string) {
   return /^#([a-f0-9]{6}|[a-f0-9]{3})$/i.test(color);
 }
 
 export class ValidationError extends Error {
-  constructor(message) {
+  constructor(message: string) {
     super(message);
     this.name = 'ValidationError';
   }
 }
 
-export function validateTag({ title, color }, constrains = {}) {
-  if (constrains.tagTitle.required && !title) {
+export function validateTag(
+  fields: { title: string; color?: string | null },
+  constrains: {
+    tagTitle?: { required: boolean; min: number; max: number };
+    tagColor?: { required: boolean };
+  } = {},
+) {
+  const { title, color } = fields;
+
+  if (constrains.tagTitle?.required && !title) {
     throw new ValidationError('Tag title is required');
   }
   if (
@@ -40,7 +53,7 @@ export function validateTag({ title, color }, constrains = {}) {
     );
   }
 
-  if (constrains.tagColor.required && !color) {
+  if (constrains.tagColor?.required && !color) {
     throw new ValidationError('Tag color is required');
   }
   if (typeof color === 'string' && !validateHex(color)) {
@@ -48,8 +61,21 @@ export function validateTag({ title, color }, constrains = {}) {
   }
 }
 
-export function validateBookmark({ title, color, note = '' }, constrains = {}) {
-  if (constrains.bookmarkTitle.required && !title) {
+export function validateBookmark(
+  fields: {
+    title?: string | null;
+    color?: string | null;
+    note?: string | null;
+  },
+  constrains: {
+    bookmarkTitle?: { required: boolean; min: number; max: number };
+    bookmarkNote?: { required: boolean; min: number; max: number };
+    bookmarkColor?: { required: boolean };
+  } = {},
+) {
+  const { title, color, note = '' } = fields;
+
+  if (constrains.bookmarkTitle?.required && !title) {
     throw new ValidationError('Bookmark title is required');
   }
   if (
@@ -63,7 +89,7 @@ export function validateBookmark({ title, color, note = '' }, constrains = {}) {
     );
   }
 
-  if (constrains.bookmarkNote.required && !note) {
+  if (constrains.bookmarkNote?.required && !note) {
     throw new ValidationError('Bookmark title is required');
   }
   if (
@@ -77,7 +103,7 @@ export function validateBookmark({ title, color, note = '' }, constrains = {}) {
     );
   }
 
-  if (constrains.bookmarkColor.required && !color) {
+  if (constrains.bookmarkColor?.required && !color) {
     throw new ValidationError('Bookmark color is required');
   }
   if (typeof color === 'string' && !validateHex(color)) {
@@ -85,7 +111,16 @@ export function validateBookmark({ title, color, note = '' }, constrains = {}) {
   }
 }
 
-export function validateImportedData(data, latestVersion, constrains = {}) {
+export function validateImportedData(
+  data: Backup,
+  latestVersion: number,
+  constrains: {
+    videoTitle?: { min: number; max: number };
+    bookmarkTitle?: { min: number; max: number };
+    bookmarkNote?: { min: number; max: number };
+    tagTitle?: { min: number; max: number };
+  } = {},
+) {
   if (!data || typeof data !== 'object') {
     throw new ValidationError('Invalid data format: expected an object');
   }

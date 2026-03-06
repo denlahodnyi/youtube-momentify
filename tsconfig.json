@@ -2,6 +2,7 @@
   "extends": "./.wxt/tsconfig.json",
   "compilerOptions": {
     "allowJs": true,
-    "strict": false
+    "strict": true,
+    "noImplicitAny": true
   }
 }
