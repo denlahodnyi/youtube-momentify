@@ -727,6 +727,11 @@ button[hidden] {
   display: flex;
   flex-direction: column;
 }
+.tag-picker__title-form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 .tag-picker__input {
   padding: 4px 6px;
 }
