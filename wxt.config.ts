@@ -1,4 +1,4 @@
-import { defineConfig } from 'wxt';
+import { defineConfig, type ResolvedPublicFile } from 'wxt';
 
 // See https://wxt.dev/api/config.html
 export default defineConfig({
@@ -6,6 +6,18 @@ export default defineConfig({
   srcDir: 'src',
   webExt: {
     startUrls: ['https://www.youtube.com/watch?v=671kyCaroAo&t=431s'],
+  },
+  hooks: {
+    'build:publicAssets': (_, files) => {
+      // Include only icons
+      const icons: ResolvedPublicFile[] = [];
+      files.forEach((file) => {
+        if (/^logo-.*?\.png$/g.test(file.relativeDest)) {
+          icons.push(file);
+        }
+      });
+      files.splice(0, files.length, ...icons);
+    },
   },
   manifest: {
     name: 'YouTube Momentify',
