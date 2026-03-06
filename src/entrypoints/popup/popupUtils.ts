@@ -1,3 +1,5 @@
+import type { Theme, Video } from '@/api';
+
 const chrome = browser;
 
 export const colors = {
@@ -11,7 +13,7 @@ export const colors = {
   'Banana King': '#FFFB08'.toLowerCase(),
 };
 
-export function formatTime(timeInSec) {
+export function formatTime(timeInSec: number) {
   const seconds = Math.max(0, Math.floor(timeInSec));
 
   const h = Math.floor(seconds / 3600);
@@ -25,17 +27,20 @@ export function formatTime(timeInSec) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-export function getVideoThumbnailUrl(videoId) {
+export function getVideoThumbnailUrl(videoId: Video['videoId']) {
   return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
 }
 
-export function getVideoUrlWithTime(videoId, timeInSec) {
+export function getVideoUrlWithTime(
+  videoId: Video['videoId'],
+  timeInSec: number,
+) {
   return `https://www.youtube.com/watch?v=${videoId}&t=${timeInSec}s`;
 }
 
-export function checkVideoPageByUrl(url) {
+export function checkVideoPageByUrl(url: string) {
   const videoPagePattern = new URLPattern({
-    baseUrl: 'https://www.youtube.com',
+    baseURL: 'https://www.youtube.com',
     pathname: '/watch',
   });
 
@@ -49,23 +54,26 @@ export function checkVideoPageByUrl(url) {
   }
 }
 
-export async function getCurrentVideoActiveTab(videoId) {
+export async function getCurrentVideoActiveTab(videoId: Video['videoId']) {
   const [activeTab] = await chrome.tabs.query({
     active: true,
     currentWindow: true,
   });
-  const result = checkVideoPageByUrl(activeTab.url);
+  const result = checkVideoPageByUrl(activeTab.url ?? '');
 
   if (result?.videoId === videoId) {
     return activeTab;
   }
 }
 
-function getYoutubeVideoTabPattern(videoId) {
+function getYoutubeVideoTabPattern(videoId: Video['videoId']) {
   return `https://*.youtube.com/watch?v=${videoId}*`;
 }
 
-export async function getCurrentVideoTabs(videoId, ...ids) {
+export async function getCurrentVideoTabs(
+  videoId: Video['videoId'],
+  ...ids: Video['videoId'][]
+) {
   const tabs = await chrome.tabs.query({
     url: [
       getYoutubeVideoTabPattern(videoId),
@@ -80,7 +88,7 @@ export async function getVideoId() {
     active: true,
     currentWindow: true,
   });
-  return checkVideoPageByUrl(activeTab.url)?.videoId;
+  return checkVideoPageByUrl(activeTab.url ?? '')?.videoId ?? null;
 }
 
 export const THEME_KEY = 'theme';
@@ -89,11 +97,11 @@ export function getAppliedTheme() {
   return document.documentElement.dataset.theme;
 }
 
-export function applyTheme(mode) {
+export function applyTheme(mode: Exclude<Theme, 'system'>) {
   document.documentElement.dataset.theme = mode;
 }
 
-export function resolveTheme(mode) {
+export function resolveTheme(mode: Theme) {
   if (mode === 'system') {
     return matchMedia('(prefers-color-scheme: dark)').matches
       ? 'dark'
@@ -102,10 +110,10 @@ export function resolveTheme(mode) {
   return mode;
 }
 
-export async function saveTheme(mode) {
+export async function saveTheme(mode: Theme) {
   return chrome.storage.local.set({ [THEME_KEY]: mode });
 }
 
 export function getSavedTheme() {
-  return chrome.storage.local.get(THEME_KEY);
+  return chrome.storage.local.get<{ theme: Theme }>(THEME_KEY);
 }

@@ -1,5 +1,13 @@
 // TODO: fix context loose error
 // (https://stackoverflow.com/questions/53939205/how-to-avoid-extension-context-invalidated-errors-when-messaging-after-an-exte)
+import {
+  typedMessage,
+  type Bookmark,
+  type ContentTypedMessage,
+  type MessagePayload,
+  type Theme,
+  type Video,
+} from '@/api';
 import './content.css';
 
 const chrome = browser;
@@ -10,8 +18,118 @@ const TIMESTAMPS_OUTER_CONTAINER_ID = 'momentify-bar';
 const TIMESTAMPS_INNER_CONTAINER_ID = 'momentify-bookmarks-container';
 const BOOKMARK_TITLE_CONSTRAINS = { min: 1, max: 80 };
 
+type ContentRendererEvent =
+  | {
+      type: 'ui/apply_video_loop';
+      payload: { loopStartId: string; loopEndId: string; videoId: string };
+    }
+  | {
+      type: 'ui/remove_video_loop';
+      payload?: never;
+    }
+  | {
+      type: 'ui/manage_loop';
+      payload: {
+        bookmarkId: Bookmark['id'];
+        action: 'start' | 'finish' | 'delete';
+      };
+    }
+  | {
+      type: 'api/save_loop';
+      payload: {
+        loopStartId: Bookmark['id'];
+        loopEndId: Bookmark['id'];
+      };
+    }
+  | {
+      type: 'api/delete_loop';
+      payload: {
+        bookmarkId: Bookmark['id'];
+      };
+    }
+  | {
+      type: 'ui/toggle_quick_save';
+      payload: { show: boolean };
+    }
+  | {
+      type: 'ui/toggle_edited_save';
+      payload: { show: boolean };
+    }
+  | {
+      type: 'api/save_bookmark';
+      payload?: { title: string; color: string; time: number };
+    }
+  | {
+      type: 'api/update_bookmark';
+      payload: { bookmark: Bookmark };
+    }
+  | {
+      type: 'ui/open_bookmark_details';
+      payload: { bookmarkId: Bookmark['id'] };
+    }
+  | {
+      type: 'ui/open_bookmark_edit_modal';
+      payload:
+        | { isNewBookmark: true }
+        | { isNewBookmark: false; bookmarkId: Bookmark['id'] };
+    }
+  | {
+      type: 'ui/to_next_bookmark';
+      payload?: never;
+    }
+  | {
+      type: 'ui/to_prev_bookmark';
+      payload?: never;
+    }
+  | {
+      type: 'ui/play_video';
+      payload: { time: number };
+    }
+  | {
+      type: 'ui/render_bookmarks';
+      payload: { bookmarks: Bookmark[] };
+    }
+  | {
+      type: 'ui/refresh_bookmarks';
+      payload?: never;
+    }
+  | {
+      type: 'ui/update_bookmark';
+      payload: { bookmark: Bookmark };
+    }
+  | {
+      type: 'ui/delete_bookmark';
+      payload: { bookmarkId: Bookmark['id'] };
+    }
+  | {
+      type: 'api/delete_bookmark';
+      payload: { bookmarkId: Bookmark['id'] };
+    }
+  | {
+      type: 'ui/delete_all_bookmarks';
+      payload?: never;
+    }
+  | {
+      type: 'ui/set_theme';
+      payload: { theme: Theme };
+    };
+
+interface State {
+  videoId: string | null;
+  videoDuration: number;
+  loopStartTime: number;
+  loopEndTime: number;
+  bookmarks: {
+    byId: Map<Bookmark['id'], Bookmark>;
+    ids: Bookmark['id'][];
+    suspended: Bookmark['id'][];
+  };
+  video: Video | null;
+  tempLoopStartId: Bookmark['id'] | null;
+}
+
 class ContentRenderer {
-  state = {
+  state: State = {
     videoId: getVideoIdFromUrl(location.href),
     videoDuration: 0,
     loopStartTime: 0,
@@ -26,28 +144,31 @@ class ContentRenderer {
   };
   static popupsContainerId = 'momentify-bookmark-popups-container';
 
-  bookmarkButtonFactory;
-  progressBarFactory;
-  markFactory;
-  markPopupFactory;
-  bookmarkEditModalFactory;
-  services;
-  bookmarkModal;
+  bookmarkButtonFactory: typeof BookmarkButton;
+  progressBarFactory: typeof ProgressBar;
+  markFactory: typeof Mark;
+  markPopupFactory: typeof MarkPopup;
+  bookmarkEditModalFactory: typeof BookmarkEditModal;
+  services: typeof Services;
+  bookmarkModal: InstanceType<typeof BookmarkEditModal>;
 
-  constructor({
-    BookmarkButton,
-    ProgressBar,
-    Mark,
-    MarkPopup,
-    BookmarkEditModal,
-    Services,
+  boundLoopHandler: (e: Event) => void;
+  boundAdjustMarksOnDurChange: (e: Event) => void;
+
+  constructor(params: {
+    BookmarkButton: typeof BookmarkButton;
+    ProgressBar: typeof ProgressBar;
+    Mark: typeof Mark;
+    MarkPopup: typeof MarkPopup;
+    BookmarkEditModal: typeof BookmarkEditModal;
+    Services: typeof Services;
   }) {
-    this.bookmarkButtonFactory = BookmarkButton;
-    this.progressBarFactory = ProgressBar;
-    this.markFactory = Mark;
-    this.markPopupFactory = MarkPopup;
-    this.bookmarkEditModalFactory = BookmarkEditModal;
-    this.services = Services;
+    this.bookmarkButtonFactory = params.BookmarkButton;
+    this.progressBarFactory = params.ProgressBar;
+    this.markFactory = params.Mark;
+    this.markPopupFactory = params.MarkPopup;
+    this.bookmarkEditModalFactory = params.BookmarkEditModal;
+    this.services = params.Services;
 
     this.boundLoopHandler = this.handleLoop.bind(this);
     this.boundAdjustMarksOnDurChange =
@@ -58,19 +179,23 @@ class ContentRenderer {
       this.render();
     });
 
+    this.bookmarkModal = new this.bookmarkEditModalFactory();
+    this.bookmarkModal.setMediator(this);
+    document.body.append(this.bookmarkModal.dom);
+
     this.setupTheme();
   }
 
-  async notify(sender, event) {
+  async notify(sender: unknown, event: ContentRendererEvent) {
     switch (event.type) {
       case 'ui/toggle_quick_save': {
-        const $button = this.bookmarkButtonFactory.find(true);
-        if ($button) $button.parentElement.hidden = !event.payload.show;
+        const $buttonWrapper = this.bookmarkButtonFactory.findContainer(true);
+        if ($buttonWrapper) $buttonWrapper.hidden = !event.payload.show;
         break;
       }
       case 'ui/toggle_edited_save': {
-        const $button = this.bookmarkButtonFactory.find();
-        if ($button) $button.parentElement.hidden = !event.payload.show;
+        const $buttonWrapper = this.bookmarkButtonFactory.findContainer();
+        if ($buttonWrapper) $buttonWrapper.hidden = !event.payload.show;
         break;
       }
       case 'ui/play_video': {
@@ -91,17 +216,21 @@ class ContentRenderer {
           const timestamps = this.state.bookmarks.ids
             .map((id) => {
               if (!this.state.bookmarks.suspended.includes(id)) {
-                return this.state.bookmarks.byId.get(id).time;
+                return this.state.bookmarks.byId.get(id)?.time;
               }
             })
             .filter((time) => typeof time !== 'undefined');
+          console.log(
+            `🚀 -> ContentRenderer -> notify -> timestamps:`,
+            timestamps,
+          );
           let next = timestamps[0];
           let start = 0;
           let end = timestamps.length - 1;
 
           if (
             $video.currentTime < timestamps[0] ||
-            $video.currentTime >= timestamps.at(-1)
+            $video.currentTime >= timestamps[timestamps.length - 1]
           ) {
             next = timestamps[0];
           } else {
@@ -116,6 +245,7 @@ class ContentRenderer {
             next = timestamps[start];
           }
 
+          console.log(`🚀 -> ContentRenderer -> notify -> next:`, next);
           if (next) {
             $video.pause();
             $video.currentTime = next;
@@ -131,7 +261,7 @@ class ContentRenderer {
           const timestamps = this.state.bookmarks.ids
             .map((id) => {
               if (!this.state.bookmarks.suspended.includes(id)) {
-                return this.state.bookmarks.byId.get(id).time;
+                return this.state.bookmarks.byId.get(id)?.time;
               }
             })
             .filter((time) => typeof time !== 'undefined');
@@ -141,7 +271,7 @@ class ContentRenderer {
 
           if (
             $video.currentTime <= timestamps[0] ||
-            $video.currentTime > timestamps.at(-1)
+            $video.currentTime > timestamps[timestamps.length - 1]
           ) {
             next = timestamps.at(-1);
           } else {
@@ -179,7 +309,7 @@ class ContentRenderer {
           });
           this.renderNewMarks(...marks);
 
-          if (!this.state.video) {
+          if (!this.state.video && this.state.videoId) {
             // Set video if we receive bookmarks for the first time
             const result = await this.services.getVideo({
               videoId: this.state.videoId,
@@ -201,7 +331,7 @@ class ContentRenderer {
         const $video = document.querySelector('video');
         const videoTitle = getVideoTitle();
 
-        if ($video) {
+        if ($video && this.state.videoId) {
           const result = await this.services.createBookmark({
             videoTitle,
             videoId: this.state.videoId,
@@ -209,9 +339,11 @@ class ContentRenderer {
             title,
             color,
           });
-          sender?.notify?.({ type: 'success' });
+          if (sender instanceof BookmarkButton) {
+            sender.notify({ type: 'success' });
+          }
 
-          if (result.success) {
+          if (result.success && this.state.videoId && !this.state.video) {
             // Set video if we save bookmark for the first time
             const result = await this.services.getVideo({
               videoId: this.state.videoId,
@@ -250,16 +382,32 @@ class ContentRenderer {
         break;
       }
       case 'ui/open_bookmark_edit_modal': {
-        const { bookmarkId, isNewBookmark = false } = event.payload || {};
         const $video = document.querySelector('video');
-        $video?.pause();
-        this.bookmarkModal.syncState({
-          isNewBookmark,
-          bookmark: isNewBookmark
-            ? { title: new Date().toLocaleString(), time: $video.currentTime }
-            : this.state.bookmarks.byId.get(bookmarkId),
-        });
-        this.bookmarkModal.open();
+        if ($video) {
+          if (event.payload.isNewBookmark) {
+            this.bookmarkModal.syncState({
+              isNewBookmark: true as const,
+              bookmark: {
+                title: new Date().toLocaleString(),
+                time: $video.currentTime,
+              },
+            });
+          } else {
+            const bookmark = this.state.bookmarks.byId.get(
+              event.payload.bookmarkId,
+            );
+            if (bookmark) {
+              this.bookmarkModal.syncState({
+                isNewBookmark: false as const,
+                bookmark,
+              });
+            }
+          }
+          $video?.pause();
+          this.bookmarkModal.open();
+        } else {
+          console.error('[momentify] Cannot find video element');
+        }
         break;
       }
       case 'ui/open_bookmark_details': {
@@ -280,8 +428,8 @@ class ContentRenderer {
 
         if (
           bookmarkId === this.state.tempLoopStartId ||
-          bookmarkId === this.state.video.loopStartId ||
-          bookmarkId === this.state.video.loopEndId
+          bookmarkId === this.state.video?.loopStartId ||
+          bookmarkId === this.state.video?.loopEndId
         ) {
           await this.notify(null, {
             type: 'ui/remove_video_loop',
@@ -307,14 +455,17 @@ class ContentRenderer {
           this.state.tempLoopStartId = bookmarkId;
           this.setMarkLoopUI(bookmarkId);
         } else if (action === 'finish') {
-          this.notify(null, {
-            type: 'api/save_loop',
-            payload: {
-              loopStartId:
-                this.state.video.loopStartId || this.state.tempLoopStartId,
-              loopEndId: bookmarkId,
-            },
-          });
+          const loopStart =
+            this.state.video?.loopStartId || this.state.tempLoopStartId;
+          if (loopStart) {
+            this.notify(null, {
+              type: 'api/save_loop',
+              payload: {
+                loopStartId: loopStart,
+                loopEndId: bookmarkId,
+              },
+            });
+          }
         } else if (action === 'delete') {
           this.notify(null, {
             type: 'api/delete_loop',
@@ -325,18 +476,21 @@ class ContentRenderer {
       }
       case 'api/save_loop': {
         const { loopStartId, loopEndId } = event.payload;
-        await this.services.saveLoop({
-          videoId: this.state.videoId,
-          loopStartId,
-          loopEndId,
-        });
+        if (this.state.videoId) {
+          await this.services.saveLoop({
+            videoId: this.state.videoId,
+            loopStartId,
+            loopEndId,
+          });
+        }
         break;
       }
       case 'ui/apply_video_loop': {
         const { loopStartId, loopEndId, videoId } = event.payload;
-        const { loopStartId: prevStart, loopEndId: prevEnd } = this.state.video;
+        const { loopStartId: prevStart, loopEndId: prevEnd } =
+          this.state.video || {};
 
-        if (this.state.videoId === videoId) {
+        if (this.state.videoId === videoId && this.state.video) {
           if (prevStart) this.setMarkLoopUI(prevStart, true);
           if (prevEnd) this.setMarkLoopUI(prevEnd, true);
           this.state.video.loopStartId = loopStartId;
@@ -353,10 +507,12 @@ class ContentRenderer {
         const { loopStartId, loopEndId } = this.state.video || {};
 
         if (loopStartId && loopEndId) {
-          await this.services.deleteLoop({
-            videoId: this.state.videoId,
-          });
-        } else {
+          if (this.state.videoId) {
+            await this.services.deleteLoop({
+              videoId: this.state.videoId,
+            });
+          }
+        } else if (this.state.tempLoopStartId) {
           const startLoopId = this.state.tempLoopStartId;
           this.state.tempLoopStartId = null;
           this.setMarkLoopUI(startLoopId, true);
@@ -365,12 +521,12 @@ class ContentRenderer {
       }
       case 'ui/remove_video_loop': {
         const { loopStartId, loopEndId } = this.state.video || {};
-        this.state.video.loopStartId = null;
-        this.state.video.loopEndId = null;
+        if (this.state.video) this.state.video.loopStartId = null;
+        if (this.state.video) this.state.video.loopEndId = null;
         this.state.tempLoopStartId = null;
         this.removeVideoLoop();
-        this.setMarkLoopUI(loopStartId, true);
-        this.setMarkLoopUI(loopEndId, true);
+        if (loopStartId) this.setMarkLoopUI(loopStartId, true);
+        if (loopEndId) this.setMarkLoopUI(loopEndId, true);
         break;
       }
       case 'ui/set_theme': {
@@ -388,7 +544,6 @@ class ContentRenderer {
     this.cleanupBookmarksData();
     this.renderPopupsContainer();
     this.renderBookmarkButton();
-    this.renderBookmarkEditModal();
     this.renderProgressBar();
   }
 
@@ -418,8 +573,7 @@ class ContentRenderer {
   }
 
   async renderBookmarkButton() {
-    let quickSave = this.bookmarkButtonFactory.find(true);
-    let editedSave = this.bookmarkButtonFactory.find(false);
+    const quickSave = this.bookmarkButtonFactory.findContainer(true);
 
     if (this.state.videoId && !quickSave) {
       const settings = await chrome.storage.local.get([
@@ -430,8 +584,6 @@ class ContentRenderer {
       const saveWithEditButton = new this.bookmarkButtonFactory(false);
       quickSaveButton.setMediator(this);
       saveWithEditButton.setMediator(this);
-      quickSave = quickSaveButton.dom;
-      editedSave = saveWithEditButton.dom;
       quickSaveButton.dom.hidden = !settings.showQuickSave;
       saveWithEditButton.dom.hidden = !settings.showEditedSave;
 
@@ -457,24 +609,31 @@ class ContentRenderer {
     const $video = document.querySelector('video');
     // On loadeddata event we can even not observe status > HAVE_METADATA, so
     // use that flag as a minimal proof of ready data
-    quickSave.disabled = $video.readyState < HTMLMediaElement.HAVE_METADATA;
-    editedSave.disabled = $video.readyState < HTMLMediaElement.HAVE_METADATA;
+    let quickSaveButton = this.bookmarkButtonFactory.find(true);
+    let editedSaveButton = this.bookmarkButtonFactory.find(true);
+
+    if ($video) {
+      quickSaveButton.disabled =
+        $video.readyState < HTMLMediaElement.HAVE_METADATA;
+      editedSaveButton.disabled =
+        $video.readyState < HTMLMediaElement.HAVE_METADATA;
+    }
 
     // Wait for data on every video change
-    document.querySelector('video').addEventListener(
+    document.querySelector('video')?.addEventListener(
       'loadstart',
-      (e) => {
-        quickSave.disabled = true;
-        editedSave.disabled = true;
+      () => {
+        quickSaveButton.disabled = true;
+        editedSaveButton.disabled = true;
       },
       { once: true },
     );
-    document.querySelector('video').addEventListener(
+    document.querySelector('video')?.addEventListener(
       'loadeddata',
-      (e) => {
-        if ($video.readyState >= HTMLMediaElement.HAVE_METADATA) {
-          quickSave.disabled = false;
-          editedSave.disabled = false;
+      () => {
+        if ($video && $video.readyState >= HTMLMediaElement.HAVE_METADATA) {
+          quickSaveButton.disabled = false;
+          editedSaveButton.disabled = false;
         }
       },
       { once: true },
@@ -533,12 +692,14 @@ class ContentRenderer {
             });
           }
 
-          const marks = this.state.bookmarks.ids.map((bookmarkId) => {
-            return this.buildBookmark(
-              this.state.bookmarks.byId.get(bookmarkId),
-              this.state.videoDuration,
-            ).dom;
-          });
+          const marks = this.state.bookmarks.ids
+            .map((bookmarkId) => {
+              const bookmark = this.state.bookmarks.byId.get(bookmarkId);
+              return bookmark
+                ? this.buildBookmark(bookmark, this.state.videoDuration).dom
+                : null;
+            })
+            .filter(($b) => $b !== null);
           this.renderNewMarks(...marks);
 
           const { loopStartId, loopEndId } = videoRes.video;
@@ -556,16 +717,7 @@ class ContentRenderer {
     }
   }
 
-  renderBookmarkEditModal() {
-    if (!this.bookmarkModal) {
-      const modal = new this.bookmarkEditModalFactory();
-      this.bookmarkModal = modal;
-      this.bookmarkModal.setMediator(this);
-      document.body.append(modal.dom);
-    }
-  }
-
-  setupVideoLoop(loopStartId, loopEndId) {
+  setupVideoLoop(loopStartId: Bookmark['id'], loopEndId: Bookmark['id']) {
     this.removeVideoLoop();
     const $startMark = this.markFactory.findMark(loopStartId);
     const $endMark = this.markFactory.findMark(loopEndId);
@@ -596,15 +748,17 @@ class ContentRenderer {
     }
   }
 
-  handleLoop(e) {
-    if (e.target.currentTime >= this.state.loopEndTime) {
-      e.target.currentTime = this.state.loopStartTime;
-    } else if (e.target.currentTime < this.state.loopStartTime) {
-      e.target.currentTime = this.state.loopStartTime;
+  handleLoop(e: Event) {
+    if ((e.target as HTMLVideoElement).currentTime > this.state.loopEndTime) {
+      (e.target as HTMLVideoElement).currentTime = this.state.loopStartTime;
+    } else if (
+      (e.target as HTMLVideoElement).currentTime < this.state.loopStartTime
+    ) {
+      (e.target as HTMLVideoElement).currentTime = this.state.loopStartTime;
     }
   }
 
-  setMarkLoopUI(bookmarkId, deleteLoop = false) {
+  setMarkLoopUI(bookmarkId: Bookmark['id'], deleteLoop = false) {
     const { loopStartId, loopEndId } = this.state.video || {};
     const { tempLoopStartId } = this.state;
     const $mark = this.markFactory.findMark(bookmarkId);
@@ -612,7 +766,7 @@ class ContentRenderer {
     const $loopButton = this.markPopupFactory.findLoopButton(bookmarkId);
     const $loopLabel = this.markPopupFactory.findLoopLabel(bookmarkId);
 
-    if (!$mark) return;
+    if (!$mark || !$loopLabel || !$loopButton || !$loopSign) return;
 
     if (bookmarkId === loopStartId || bookmarkId === tempLoopStartId) {
       $mark.dataset.loop = 'start';
@@ -623,10 +777,12 @@ class ContentRenderer {
     if (deleteLoop) delete $mark.dataset.loop;
 
     if ($mark.dataset.loop === 'start' || $mark.dataset.loop === 'finish') {
-      if ($mark.dataset.loop === 'start') {
-        $loopLabel.firstElementChild.textContent = 'Loop starts here';
+      if ($loopLabel && $mark.dataset.loop === 'start') {
+        if ($loopLabel.firstElementChild)
+          $loopLabel.firstElementChild.textContent = 'Loop starts here';
       } else {
-        $loopLabel.firstElementChild.textContent = 'Loop ends here';
+        if ($loopLabel.firstElementChild)
+          $loopLabel.firstElementChild.textContent = 'Loop ends here';
       }
 
       $loopButton.dataset.action = '';
@@ -634,13 +790,15 @@ class ContentRenderer {
       $loopLabel.hidden = false;
       $loopSign.style.display = 'block';
     } else if (tempLoopStartId || loopStartId) {
-      $loopButton.querySelector('span').textContent = 'Set loop end';
+      const $btnTitle = $loopButton.querySelector('span');
+      if ($btnTitle) $btnTitle.textContent = 'Set loop end';
       $loopButton.dataset.action = 'finish';
       $loopButton.hidden = false;
       $loopLabel.hidden = true;
       $loopSign.style.display = 'none';
     } else {
-      $loopButton.querySelector('span').textContent = 'Set loop start';
+      const $btnTitle = $loopButton.querySelector('span');
+      if ($btnTitle) $btnTitle.textContent = 'Set loop start';
       $loopButton.dataset.action = 'start';
       $loopButton.hidden = false;
       $loopLabel.hidden = true;
@@ -648,7 +806,7 @@ class ContentRenderer {
     }
   }
 
-  buildBookmark(bookmark, duration) {
+  buildBookmark(bookmark: Bookmark, duration: number) {
     const mark = new this.markFactory({
       bookmark,
       duration,
@@ -679,13 +837,11 @@ class ContentRenderer {
     return mark;
   }
 
-  adjustMarksOnDurationChange(e) {
-    if (
-      this.state.videoDuration === e.target.duration ||
-      isNaN(e.target.duration)
-    )
+  adjustMarksOnDurationChange(e: Event) {
+    const $video = e.target as HTMLVideoElement;
+    if (this.state.videoDuration === $video.duration || isNaN($video.duration))
       return;
-    this.state.videoDuration = e.target.duration;
+    this.state.videoDuration = $video.duration;
     const marks = this.markFactory.findAllBookmarks();
 
     if (marks) {
@@ -693,7 +849,7 @@ class ContentRenderer {
         const time = this.markFactory.getMarkTime($m);
         const id = this.markFactory.getBookmarkIdFromDom($m);
 
-        if (time > e.target.duration) {
+        if (id && time > $video.duration) {
           console.warn(
             `[momentify] Bookmark was removed, cause it exceeds video duration:`,
             id,
@@ -702,31 +858,31 @@ class ContentRenderer {
             this.markFactory.suspendMark($m);
             this.state.bookmarks.suspended.push(id);
           }
-        } else {
+        } else if (id) {
           // Reactivate suspended mark
           this.markFactory.activateMark($m);
           if (this.state.bookmarks.suspended.includes(id)) {
             this.state.bookmarks.suspended =
               this.state.bookmarks.suspended.filter((bId) => bId !== id);
           }
-          $m.style.left = `${this.markFactory.getMarkOffset(time, e.target.duration)}%`;
+          $m.style.left = `${this.markFactory.getMarkOffset(time, $video.duration)}%`;
         }
       });
     }
   }
 
   sortMarks() {
-    this.state.bookmarks.ids = this.state.bookmarks.ids.toSorted(
-      (a, b) =>
-        this.state.bookmarks.byId.get(a).time -
-        this.state.bookmarks.byId.get(b).time,
-    );
+    this.state.bookmarks.ids = this.state.bookmarks.ids.toSorted((a, b) => {
+      const b1 = this.state.bookmarks.byId.get(a);
+      const b2 = this.state.bookmarks.byId.get(b);
+      return b1 && b2 ? b1.time - b2.time : 0;
+    });
     const marks = Array.from(this.markFactory.findAllBookmarks(true));
     const sorted = this.state.bookmarks.ids
       .map((id) =>
         marks.find(($m) => id === this.markFactory.getBookmarkIdFromDom($m)),
       )
-      .filter(Boolean);
+      .filter(($m) => !!$m);
     return sorted;
   }
 
@@ -736,7 +892,7 @@ class ContentRenderer {
     else console.error('[momentify] Cannot find marks container');
   }
 
-  renderNewMarks(...$marks) {
+  renderNewMarks(...$marks: HTMLElement[]) {
     this.progressBarFactory.pushBookmark(...$marks);
     this.reorderRenderedMarks();
   }
@@ -762,7 +918,9 @@ class ContentRenderer {
   }
 
   async setupTheme() {
-    const { theme = 'system' } = await chrome.storage.local.get('theme');
+    const { theme = 'system' } = await chrome.storage.local.get<{
+      theme: Theme;
+    }>('theme');
     applyTheme(resolveTheme(theme));
 
     matchMedia('(prefers-color-scheme: dark)').addEventListener(
@@ -778,7 +936,7 @@ class ContentRenderer {
 }
 
 let lastUrl = location.href;
-function observeUrlChange(cb) {
+function observeUrlChange(cb: (lastUrl: string) => void) {
   const observer = new MutationObserver(() => {
     if (location.href !== lastUrl) {
       console.log("Observer: urls don't match", lastUrl, location.href);
@@ -793,26 +951,26 @@ function observeUrlChange(cb) {
 }
 
 class BookmarkButton {
-  id;
+  id: string;
+  mediator?: InstanceType<typeof ContentRenderer>;
   isQuick = false;
+  dom: HTMLElement;
+  buttonDom: HTMLButtonElement;
 
   constructor(isQuick = false) {
     this.isQuick = isQuick;
     this.id = BookmarkButton.createDomId(isQuick);
     const label = isQuick ? 'Save quick bookmark' : 'Edit and save bookmark';
     const $button = isQuick
-      ? createDomElement(`
-        <div class="momentify-bookmark-btn-container">
+      ? createDomElement<HTMLButtonElement>(`
           <button id=${this.id} aria-label="${label}" class="momentify-bookmark-btn ytp-button" style="padding: 0; display: flex; align-items: center; justify-content: center;">
             <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                 stroke-width="1" stroke-linecap="round" stroke-linejoin="round" style="padding: 0;">
               <path fill="none" d="M7 3a2 2 0 0 0-2 2v14.5c0 .6.6 1 1.1.7L12 17.2l5.9 3c.5.3 1.1-.1 1.1-.7V5a2 2 0 0 0-2-2H7z"/>
             </svg>
           </button>
-        </div>
       `)
-      : createDomElement(`
-        <div class="momentify-bookmark-btn-container">
+      : createDomElement<HTMLButtonElement>(`
           <button id=${this.id} aria-label="${label}" class="momentify-bookmark-btn ytp-button" style="padding: 0; display: flex; align-items: center; justify-content: center;">
             <svg width="30" height="30" viewBox="0 0 24 24" style="padding: 0;">
               <mask id="pen-cut">
@@ -824,20 +982,24 @@ class BookmarkButton {
                 d="M7 3a2 2 0 0 0-2 2v14.5c0 .6.6 1 1.1.7L12 17.2l5.9 3c.5.3 1.1-.1 1.1-.7V5a2 2 0 0 0-2-2H7z"/>
             </svg>
           </button>
-        </div>
       `);
     $button.addEventListener('click', this.handleSaveBookmark.bind(this));
-    this.dom = $button;
+    this.buttonDom = $button;
+    const $container = createDomElement<HTMLElement>(
+      `<div id="${BookmarkButton.createWrapperDomId(isQuick)}" class="momentify-bookmark-btn-container"></div`,
+    );
+    $container.append($button);
+    this.dom = $container;
   }
 
-  setMediator(mediator) {
+  setMediator(mediator: InstanceType<typeof ContentRenderer>) {
     this.mediator = mediator;
   }
 
   handleSaveBookmark() {
     if (this.isQuick) {
-      this.dom.disabled = true;
-      this.dom.dataset.loading = true;
+      this.buttonDom.disabled = true;
+      this.buttonDom.dataset.loading = 'true';
       this.mediator?.notify(this, { type: 'api/save_bookmark' });
     } else {
       this.mediator?.notify(this, {
@@ -847,25 +1009,42 @@ class BookmarkButton {
     }
   }
 
-  notify({ type }) {
+  notify({ type }: { type: 'success' }) {
     if (type === 'success') {
-      this.dom.disabled = false;
-      this.dom.dataset.loading = false;
+      this.buttonDom.disabled = false;
+      this.buttonDom.dataset.loading = 'false';
     }
   }
 
-  static find(isQuick = false) {
-    return document.getElementById(this.createDomId(isQuick));
+  static find(isQuick = false): HTMLButtonElement {
+    return document.getElementById(
+      this.createDomId(isQuick),
+    ) as HTMLButtonElement;
+  }
+
+  static findContainer(isQuick = false): HTMLElement {
+    return document.getElementById(
+      this.createWrapperDomId(isQuick),
+    ) as HTMLElement;
   }
 
   static createDomId(isQuick = false) {
     return isQuick ? QUICK_SAVE_BTN_ID : SAVE_WITH_EDIT_BTN_ID;
   }
+
+  static createWrapperDomId(isQuick = false) {
+    return isQuick
+      ? `${QUICK_SAVE_BTN_ID}-wrapper`
+      : `${SAVE_WITH_EDIT_BTN_ID}-wrapper`;
+  }
 }
 
 class ProgressBar {
+  dom: HTMLElement;
+  innerContainer: HTMLElement;
+
   constructor() {
-    const $container = createDomElement(`
+    const $container = createDomElement<HTMLElement>(`
       <div id="${TIMESTAMPS_OUTER_CONTAINER_ID}" style="
         position:absolute;
         top:0;
@@ -873,7 +1052,7 @@ class ProgressBar {
         width:100%;
         height:100%;"></div>
     `);
-    this.innerContainer = createDomElement(`
+    this.innerContainer = createDomElement<HTMLElement>(`
         <div id="${TIMESTAMPS_INNER_CONTAINER_ID}" style="
           position:relative;
           width:100%;
@@ -896,20 +1075,29 @@ class ProgressBar {
     if ($container) $container.replaceChildren();
   }
 
-  static pushBookmark(...$bookmarks) {
+  static pushBookmark(...$bookmarks: HTMLElement[]) {
     ProgressBar.findMarksContainer()?.append(...$bookmarks);
   }
 }
 
 class Mark {
-  mediator;
-  state = { id: null };
+  state: { id: null | Bookmark['id'] } = { id: null };
+  mediator?: InstanceType<typeof ContentRenderer>;
+  dom: HTMLElement;
+  markDom: HTMLButtonElement;
+  loopSignDom: HTMLElement;
 
   static wrapperComponentName = 'mark-wrapper';
   static markComponentName = 'mark';
   static loopSignComponentName = 'loop-sign';
 
-  constructor({ bookmark, duration }) {
+  constructor({
+    bookmark,
+    duration,
+  }: {
+    bookmark: Bookmark;
+    duration: number;
+  }) {
     const { id, time, color } = bookmark;
     this.state = { id };
 
@@ -963,96 +1151,107 @@ class Mark {
     this.dom.append(this.loopSignDom);
   }
 
-  static find(bookmarkId) {
+  static find(bookmarkId: Bookmark['id']) {
     return document.getElementById(this.createMarkWrapperDomId(bookmarkId));
   }
 
-  static findMark(bookmarkId) {
+  static findMark(bookmarkId: Bookmark['id']) {
     return document.getElementById(this.createMarkDomId(bookmarkId));
   }
 
   static findAllBookmarks(withContainer = false) {
     return withContainer
-      ? document.querySelectorAll(
+      ? document.querySelectorAll<HTMLElement>(
           `[data-component="${Mark.wrapperComponentName}"]`,
         )
-      : document.querySelectorAll(
+      : document.querySelectorAll<HTMLElement>(
           `[data-component="${Mark.markComponentName}"]`,
         );
   }
 
-  static findLoopSign(bookmarkId) {
-    return this.find(bookmarkId)?.querySelector(
+  static findLoopSign(bookmarkId: Bookmark['id']) {
+    return this.find(bookmarkId)?.querySelector<HTMLElement>(
       `[data-component="${Mark.loopSignComponentName}"]`,
     );
   }
 
   static findLoopMarks($container = document) {
-    const $start = $container.querySelector('[data-loop="start"]');
-    const $end = $container.querySelector('[data-loop="finish"]');
+    const $start = $container.querySelector<HTMLElement>('[data-loop="start"]');
+    const $end = $container.querySelector<HTMLElement>('[data-loop="finish"]');
 
     return [$start, $end];
   }
 
   static findAllLoopMarks($container = document) {
-    return $container.querySelectorAll('[data-loop]');
+    return $container.querySelectorAll<HTMLElement>('[data-loop]');
   }
 
-  static createMarkDomId(bookmarkId) {
+  static createMarkDomId(bookmarkId: Bookmark['id']) {
     return `momentify-bookmark-${bookmarkId}`;
   }
 
-  static createMarkWrapperDomId(bookmarkId) {
+  static createMarkWrapperDomId(bookmarkId: Bookmark['id']) {
     return `momentify-wrapper-bookmark-${bookmarkId}`;
   }
 
-  static getBookmarkIdFromDom($markOrWrapper) {
+  static getBookmarkIdFromDom($markOrWrapper: HTMLElement) {
     return $markOrWrapper.dataset.id;
   }
 
-  static removeMark(bookmarkId) {
+  static removeMark(bookmarkId: Bookmark['id']) {
     this.find(bookmarkId)?.remove();
   }
 
-  static getMarkOffset(time, duration) {
+  static getMarkOffset(time: number, duration: number) {
     return (time / duration) * 100;
   }
 
-  static getMarkTime($mark) {
+  static getMarkTime($mark: HTMLElement) {
     return Number($mark.dataset.time);
   }
 
-  static suspendMark($mark) {
+  static suspendMark($mark: HTMLElement) {
     $mark.style.display = 'none';
     $mark.dataset.suspended = 'true';
   }
 
-  static activateMark($mark) {
+  static activateMark($mark: HTMLElement) {
     $mark.style.display = 'block';
     delete $mark.dataset.suspended;
   }
 
-  setMediator(mediator) {
+  setMediator(mediator: InstanceType<typeof ContentRenderer>) {
     this.mediator = mediator;
   }
 
-  handleMarkHoverOrClick(e) {
-    this.mediator.notify(this, {
-      type: 'ui/open_bookmark_details',
-      payload: { bookmarkId: this.state.id },
-    });
+  handleMarkHoverOrClick() {
+    if (this.state.id) {
+      this.mediator?.notify(this, {
+        type: 'ui/open_bookmark_details',
+        payload: { bookmarkId: this.state.id },
+      });
+    }
   }
 }
 
 class MarkPopup {
-  mediator;
-  popupsContainerId;
-  state = { id: null };
+  state: { id: Bookmark['id'] | null } = { id: null };
+  mediator?: InstanceType<typeof ContentRenderer>;
+  popupsContainerId: string;
+  dom: Element;
+  popup: HTMLDialogElement;
+  boundedHandlePopupClickAway: (e: Event) => void;
 
   static ytVideoContainerClassname = '.html5-video-player';
   static popupComponentName = 'mark-popup';
 
-  constructor({ bookmark, popupsContainerId }) {
+  constructor({
+    bookmark,
+    popupsContainerId,
+  }: {
+    bookmark: Bookmark;
+    popupsContainerId: string;
+  }) {
     const { title, id } = bookmark;
     this.state.id = id;
     this.popupsContainerId = popupsContainerId;
@@ -1108,19 +1307,19 @@ class MarkPopup {
 
     this.popup
       .querySelector('[data-action="close"]')
-      .addEventListener('click', this.handleClosePopup.bind(this));
+      ?.addEventListener('click', this.handleClosePopup.bind(this));
     this.popup
       .querySelector('[data-action="delete"]')
-      .addEventListener('click', this.handleDeleteBookmark.bind(this));
+      ?.addEventListener('click', this.handleDeleteBookmark.bind(this));
     this.popup
       .querySelector('[data-action="edit"]')
-      .addEventListener('click', this.handleEditBookmark.bind(this));
+      ?.addEventListener('click', this.handleEditBookmark.bind(this));
     this.popup
       .querySelector('[data-component="loop-del-btn"]')
-      .addEventListener('click', this.handleLoopDelete.bind(this));
+      ?.addEventListener('click', this.handleLoopDelete.bind(this));
     this.popup
       .querySelector('[data-component="loop-btn"]')
-      .addEventListener('click', this.handleLoopSet.bind(this));
+      ?.addEventListener('click', this.handleLoopSet.bind(this));
 
     this.boundedHandlePopupClickAway = this.handlePopupClickAway.bind(this);
 
@@ -1137,50 +1336,54 @@ class MarkPopup {
     this.dom.append(this.popup);
   }
 
-  setMediator(mediator) {
+  setMediator(mediator: InstanceType<typeof ContentRenderer>) {
     this.mediator = mediator;
   }
 
-  static findPopup(bookmarkId) {
-    return document.getElementById(this.createPopupDomId(bookmarkId));
+  static findPopup(bookmarkId: Bookmark['id']): HTMLDialogElement {
+    return document.getElementById(
+      this.createPopupDomId(bookmarkId),
+    ) as HTMLDialogElement;
   }
 
-  static findPopupTitle(bookmarkId) {
+  static findPopupTitle(bookmarkId: Bookmark['id']) {
     const $popup = this.findPopup(bookmarkId);
     if ($popup) {
       return $popup.querySelector('[data-component="bookmark-title"]');
     }
   }
 
-  static findLoopButton(bookmarkId) {
-    return this.findPopup(bookmarkId)?.querySelector(
+  static findLoopButton(bookmarkId: Bookmark['id']) {
+    return this.findPopup(bookmarkId)?.querySelector<HTMLButtonElement>(
       '[data-component="loop-btn"]',
     );
   }
 
-  static findLoopLabel(bookmarkId) {
-    return this.findPopup(bookmarkId)?.querySelector(
+  static findLoopLabel(bookmarkId: Bookmark['id']) {
+    return this.findPopup(bookmarkId)?.querySelector<HTMLElement>(
       '[data-component="loop-label"]',
     );
   }
 
-  static createPopupDomId(bookmarkId) {
+  static createPopupDomId(bookmarkId: Bookmark['id']) {
     return `momentify-bookmark-popup-${bookmarkId}`;
   }
 
-  static removePopup(bookmarkId) {
-    this.findPopup(bookmarkId)?.parentElement.remove();
+  static removePopup(bookmarkId: Bookmark['id']) {
+    this.findPopup(bookmarkId)?.parentElement?.remove();
   }
 
   static closeAllPopups() {
     document
-      .querySelectorAll(`[data-component="${MarkPopup.popupComponentName}"]`)
+      .querySelectorAll<HTMLDialogElement>(
+        `[data-component="${MarkPopup.popupComponentName}"]`,
+      )
       .forEach(($p) => {
         $p.close();
       });
   }
 
-  static isInPopup($el) {
+  static isInPopup($el: Element) {
     const $openedPopup = document.querySelector(
       `[data-component="${MarkPopup.popupComponentName}"][open]`,
     );
@@ -1189,8 +1392,8 @@ class MarkPopup {
     );
   }
 
-  handlePopupClickAway(e) {
-    if (!MarkPopup.isInPopup(e.target)) {
+  handlePopupClickAway(e: Event) {
+    if (!MarkPopup.isInPopup(e.target as Element)) {
       MarkPopup.closeAllPopups();
       document
         .querySelector(MarkPopup.ytVideoContainerClassname)
@@ -1200,46 +1403,57 @@ class MarkPopup {
     }
   }
 
-  handleClosePopup(e) {
+  handleClosePopup(e: Event) {
     e.preventDefault();
     e.stopPropagation();
     this.popup.close();
   }
 
-  handleDeleteBookmark(e) {
-    this.mediator.notify(this, {
-      type: 'api/delete_bookmark',
-      payload: { bookmarkId: this.state.id },
-    });
+  handleDeleteBookmark() {
+    if (this.state.id) {
+      this.mediator?.notify(this, {
+        type: 'api/delete_bookmark',
+        payload: { bookmarkId: this.state.id },
+      });
+    }
   }
 
   handleEditBookmark() {
-    this.popup.close();
-    this.mediator.notify(this, {
-      type: 'ui/open_bookmark_edit_modal',
-      payload: { bookmarkId: this.state.id },
-    });
+    if (this.state.id) {
+      this.popup.close();
+      this.mediator?.notify(this, {
+        type: 'ui/open_bookmark_edit_modal',
+        payload: { isNewBookmark: false, bookmarkId: this.state.id },
+      });
+    }
   }
 
-  handleLoopSet(e) {
-    const action = e.currentTarget.dataset.action;
-    this.mediator.notify(this, {
-      type: 'ui/manage_loop',
-      payload: {
-        bookmarkId: this.state.id,
-        action,
-      },
-    });
+  handleLoopSet(e: Event) {
+    const action = (e.currentTarget as HTMLElement).dataset.action as
+      | 'start'
+      | 'finish'
+      | 'delete';
+    if (this.state.id) {
+      this.mediator?.notify(this, {
+        type: 'ui/manage_loop',
+        payload: {
+          bookmarkId: this.state.id,
+          action,
+        },
+      });
+    }
   }
 
   handleLoopDelete() {
-    this.mediator.notify(this, {
-      type: 'ui/manage_loop',
-      payload: {
-        bookmarkId: this.state.id,
-        action: 'delete',
-      },
-    });
+    if (this.state.id) {
+      this.mediator?.notify(this, {
+        type: 'ui/manage_loop',
+        payload: {
+          bookmarkId: this.state.id,
+          action: 'delete',
+        },
+      });
+    }
   }
 
   disablePopupTouchEventsLeak() {
@@ -1283,8 +1497,14 @@ class BookmarkEditModal {
     'Banana King': '#FFFB08'.toLowerCase(),
   };
 
-  state = { bookmark: null, isNew: false };
-  mediator;
+  state:
+    | { bookmark: Partial<Bookmark> & { time: Bookmark['time'] }; isNew: true }
+    | { bookmark: Bookmark; isNew: false } = {
+    bookmark: { time: 0 },
+    isNew: true,
+  };
+  mediator?: InstanceType<typeof ContentRenderer>;
+  dom: HTMLDialogElement;
 
   constructor() {
     this.dom = createDomElement(`
@@ -1329,64 +1549,86 @@ class BookmarkEditModal {
     const colorOptions = Object.entries(BookmarkEditModal.colors).map(
       ([color, hex]) => {
         const $colorOption = this.dom
-          .querySelector('#momentify-color-picker-template')
-          .content.firstElementChild.cloneNode(true);
+          .querySelector<HTMLTemplateElement>(
+            '#momentify-color-picker-template',
+          )
+          ?.content.firstElementChild?.cloneNode(true) as HTMLElement;
         $colorOption.style.backgroundColor = hex;
-        $colorOption.querySelector(
+        const $colorName = $colorOption.querySelector<HTMLElement>(
           '[data-component="color-picker-item-name"]',
-        ).style.backgroundColor = color;
-        $colorOption.querySelector(
+        );
+        if ($colorName) $colorName.style.backgroundColor = color;
+        const $colorInput = $colorOption.querySelector<HTMLInputElement>(
           '[data-component="color-picker-item-input"]',
-        ).value = hex;
+        );
+        if ($colorInput) $colorInput.value = hex;
         return $colorOption;
       },
     );
 
     this.dom
       .querySelector('[data-component="color-picker"]')
-      .append(...colorOptions);
+      ?.append(...colorOptions);
 
     const $titleInput = this.dom.querySelector('#momentify-edit-modal-title');
     const $titleCharsCount = this.dom.querySelector(
       '[data-component="momentify-edit-modal-title-chars-count"]',
     );
-    $titleInput.addEventListener('input', (e) => {
-      $titleCharsCount.textContent = e.target.value.length;
+    $titleInput?.addEventListener('input', (e) => {
+      if ($titleCharsCount)
+        $titleCharsCount.textContent = (
+          e.target as HTMLInputElement
+        ).value.length.toString();
     });
 
     this.dom
-      .querySelector('#momentify-edit-modal-form')
-      .addEventListener('submit', this.handleSubmit.bind(this));
+      .querySelector<HTMLFormElement>('#momentify-edit-modal-form')
+      ?.addEventListener('submit', this.handleSubmit.bind(this));
   }
 
   static find() {
-    return document.getElementById('momentify-edit-modal');
+    return document.getElementById('momentify-edit-modal') as HTMLDialogElement;
   }
 
-  setMediator(mediator) {
+  setMediator(mediator: InstanceType<typeof ContentRenderer>) {
     this.mediator = mediator;
   }
 
-  syncState(state) {
+  syncState<TNew extends boolean>(
+    state: TNew extends true
+      ? {
+          isNewBookmark: TNew;
+          bookmark: Partial<Bookmark> & { time: Bookmark['time'] };
+        }
+      : { isNewBookmark: TNew; bookmark: Bookmark },
+  ) {
     this.state.isNew = state.isNewBookmark;
 
     if (state.bookmark) {
       this.state.bookmark = state.bookmark;
-      this.dom.querySelector('#momentify-edit-modal-title').value =
-        state.bookmark.title;
-      this.dom.querySelector(
-        '[data-component="momentify-edit-modal-title-chars-count"]',
-      ).textContent = state.bookmark.title.length;
-      const isAvailableColor = Object.values(BookmarkEditModal.colors).includes(
-        state.bookmark.color?.toLowerCase(),
+      const $title = this.dom.querySelector<HTMLInputElement>(
+        '#momentify-edit-modal-title',
       );
+      if ($title) $title.value = state.bookmark.title ?? '';
+      const $chars = this.dom.querySelector(
+        '[data-component="momentify-edit-modal-title-chars-count"]',
+      );
+      if ($chars)
+        $chars.textContent = state.bookmark.title?.length.toString() ?? '0';
+      const isAvailableColor = state.bookmark.color
+        ? Object.values(BookmarkEditModal.colors).includes(
+            state.bookmark.color.toLowerCase(),
+          )
+        : false;
       this.dom
-        .querySelectorAll('[data-component="color-picker-item-input"]')
+        .querySelectorAll<HTMLInputElement>(
+          '[data-component="color-picker-item-input"]',
+        )
         .forEach(($input, i) => {
           $input.checked = false;
 
           if (isAvailableColor) {
-            if ($input.value === state.bookmark.color.toLowerCase()) {
+            if ($input.value === state.bookmark.color!.toLowerCase()) {
               $input.checked = true;
             }
           } else if (i === 0) {
@@ -1400,13 +1642,17 @@ class BookmarkEditModal {
     this.dom.showModal();
   }
 
-  handleSubmit(e) {
-    const data = new FormData(e.target);
-    const title = data.get('title');
-    const color = data.get('color');
+  close() {
+    this.dom.close();
+  }
+
+  handleSubmit(e: SubmitEvent) {
+    const data = new FormData(e.target as HTMLFormElement);
+    const title = data.get('title') as string;
+    const color = data.get('color') as string;
 
     if (this.mediator) {
-      if (this.state.isNew) {
+      if (this.state.isNew === true) {
         this.mediator.notify(this, {
           type: 'api/save_bookmark',
           payload: { title, color, time: this.state.bookmark.time },
@@ -1428,55 +1674,73 @@ class BookmarkEditModal {
 }
 
 class Services {
-  static async createBookmark(payload) {
+  static async createBookmark(
+    payload: MessagePayload['CREATE_BOOKMARK']['in'],
+  ) {
     return await chrome.runtime.sendMessage({
       action: 'CREATE_BOOKMARK',
       ...payload,
     });
   }
-  static async updateBookmark(bookmark) {
-    return await chrome.runtime.sendMessage({
-      action: 'UPDATE_BOOKMARK',
-      bookmark,
-    });
+  static async updateBookmark(bookmark: Bookmark) {
+    return await chrome.runtime.sendMessage(
+      typedMessage('UPDATE_BOOKMARK', 'in', { bookmark }),
+    );
   }
 
-  static async getBookmarks({ videoId }) {
-    return await chrome.runtime.sendMessage({
-      action: 'GET_BOOKMARKS_BY_VIDEO_ID',
-      videoId,
-      normalized: true,
-    });
+  static async getBookmarks({ videoId }: { videoId: Video['videoId'] }) {
+    return await chrome.runtime.sendMessage(
+      typedMessage('GET_BOOKMARKS_BY_VIDEO_ID', 'in', {
+        videoId,
+        normalized: true,
+      }),
+    );
   }
 
-  static async getVideo({ videoId }) {
-    return await chrome.runtime.sendMessage({
-      action: 'GET_VIDEO',
-      videoId,
-    });
+  static async getVideo({
+    videoId,
+  }: {
+    videoId: Video['videoId'];
+  }): Promise<MessagePayload['GET_VIDEO']['out']> {
+    return await chrome.runtime.sendMessage(
+      typedMessage('GET_VIDEO', 'in', {
+        videoId,
+      }),
+    );
   }
 
-  static async deleteBookmark({ bookmarkId }) {
-    return await chrome.runtime.sendMessage({
-      action: 'DELETE_BOOKMARK',
-      bookmarkId,
-    });
+  static async deleteBookmark({ bookmarkId }: { bookmarkId: Bookmark['id'] }) {
+    return await chrome.runtime.sendMessage(
+      typedMessage('DELETE_BOOKMARK', 'in', {
+        bookmarkId,
+      }),
+    );
   }
 
-  static async saveLoop({ videoId, loopStartId, loopEndId }) {
-    return await chrome.runtime.sendMessage({
-      action: 'SAVE_VIDEO_LOOP',
-      videoId,
-      loopStartId,
-      loopEndId,
-    });
+  static async saveLoop({
+    videoId,
+    loopStartId,
+    loopEndId,
+  }: {
+    videoId: Video['videoId'];
+    loopStartId: Bookmark['id'];
+    loopEndId: Bookmark['id'];
+  }) {
+    return await chrome.runtime.sendMessage(
+      typedMessage('SAVE_VIDEO_LOOP', 'in', {
+        videoId,
+        loopStartId,
+        loopEndId,
+      }),
+    );
   }
 
-  static async deleteLoop({ videoId }) {
-    return await chrome.runtime.sendMessage({
-      action: 'DELETE_VIDEO_LOOP',
-      videoId,
-    });
+  static async deleteLoop({ videoId }: { videoId: Video['videoId'] }) {
+    return await chrome.runtime.sendMessage(
+      typedMessage('DELETE_VIDEO_LOOP', 'in', {
+        videoId,
+      }),
+    );
   }
 }
 
@@ -1490,7 +1754,7 @@ const contentRenderer = new ContentRenderer({
 });
 contentRenderer.render();
 
-chrome.runtime.onMessage.addListener(async (message) => {
+chrome.runtime.onMessage.addListener(async (message: ContentTypedMessage) => {
   switch (message.action) {
     case 'CONTENT/SET_VIDEO_LOOP': {
       await contentRenderer.notify(null, {
@@ -1595,7 +1859,7 @@ chrome.runtime.onMessage.addListener(async (message) => {
       });
     }
     default:
-      console.warn('[momentify] Unknown action:', message.action);
+      console.warn('[momentify] Unknown action:', message);
   }
 });
 
@@ -1603,14 +1867,14 @@ function getVideoTitle() {
   return document.title.split(' - YouTube')[0];
 }
 
-function getVideoIdFromUrl(url) {
+function getVideoIdFromUrl(url: string) {
   const params = getVideoPageUrlParams(url);
-  return params?.videoId;
+  return params?.videoId || null;
 }
 
-function getVideoPageUrlParams(url) {
+function getVideoPageUrlParams(url: string) {
   const videoPagePattern = new URLPattern({
-    baseUrl: 'https://www.youtube.com',
+    baseURL: 'https://www.youtube.com',
     pathname: '/watch',
   });
 
@@ -1624,12 +1888,12 @@ function getVideoPageUrlParams(url) {
   }
 }
 
-function createDomElement(html) {
+function createDomElement<TElement extends Element>(html: string): TElement {
   const dom = new DOMParser().parseFromString(html, 'text/html');
-  return dom.body.firstElementChild;
+  return dom.body.firstElementChild as TElement;
 }
 
-function formatTime(timeInSec) {
+function formatTime(timeInSec: number) {
   const seconds = Math.max(0, Math.floor(timeInSec));
 
   const h = Math.floor(seconds / 3600);
@@ -1643,7 +1907,7 @@ function formatTime(timeInSec) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-function resolveTheme(mode) {
+function resolveTheme(mode: Theme) {
   if (mode === 'system') {
     return matchMedia('(prefers-color-scheme: dark)').matches
       ? 'dark'
@@ -1652,6 +1916,6 @@ function resolveTheme(mode) {
   return mode;
 }
 
-function applyTheme(mode) {
+function applyTheme(mode: Exclude<Theme, 'system'>) {
   document.documentElement.dataset.momentifyTheme = mode;
 }
