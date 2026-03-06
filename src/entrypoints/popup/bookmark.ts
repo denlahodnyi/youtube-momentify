@@ -1,16 +1,14 @@
-import {
-  formatTime,
-  getCurrentVideoActiveTab,
-  getCurrentVideoTabs,
-  getVideoUrlWithTime,
-} from './popupUtils.js';
-import type Services from './services.js';
 import { Bookmark as BookmarkEntity } from '@/api/index.js';
+import {
+  BOOKMARK_TITLE_CONSTRAINS,
+  BOOKMARK_NOTE_CONSTRAINS,
+  formatTime,
+  getCurrentVideoTabs,
+} from '@/shared';
+import { getCurrentVideoActiveTab, getVideoUrlWithTime } from './popupUtils.js';
+import type Services from './services.js';
 
 const chrome = browser;
-
-const BOOKMARK_TITLE_CONSTRAINS = { min: 1, max: 80 };
-const BOOKMARK_NOTE_CONSTRAINS = { min: 0, max: 200 };
 
 export default class Bookmark {
   dom: HTMLElement;

@@ -180,10 +180,10 @@ export default class SettingsPage {
     const $exportButton = document.getElementById('export-action');
     $exportButton?.addEventListener('click', async () => {
       const $link = document.createElement('a');
-      const { success, data } = await this.services.exportData();
+      const result = await this.services.exportData();
 
-      if (success) {
-        const blob = new Blob([JSON.stringify(data, null, 2)], {
+      if (result.success) {
+        const blob = new Blob([JSON.stringify(result.data, null, 2)], {
           type: 'application/json',
         });
         $link.href = URL.createObjectURL(blob);

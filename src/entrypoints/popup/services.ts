@@ -23,13 +23,17 @@ export default class Services {
     );
   }
 
-  static async getVideosCount() {
+  static async getVideosCount(): Promise<
+    MessagePayload['GET_VIDEOS_TOTAL_COUNT']['out']
+  > {
     return chrome.runtime.sendMessage(
       typedMessage('GET_VIDEOS_TOTAL_COUNT', 'in', {}),
     );
   }
 
-  static async getVideoBookmarksCount(videoId: Video['videoId']) {
+  static async getVideoBookmarksCount(
+    videoId: Video['videoId'],
+  ): Promise<MessagePayload['GET_BOOKMARKS_COUNT_BY_VIDEO_ID']['out']> {
     return chrome.runtime.sendMessage(
       typedMessage('GET_BOOKMARKS_COUNT_BY_VIDEO_ID', 'in', {
         videoId,
@@ -60,7 +64,7 @@ export default class Services {
     );
   }
 
-  static async getTags() {
+  static async getTags(): Promise<MessagePayload['GET_TAGS']['out']> {
     return chrome.runtime.sendMessage(
       typedMessage('GET_TAGS', 'in', {
         normalized: true,
@@ -78,7 +82,9 @@ export default class Services {
     );
   }
 
-  static async updateTag(tag: Tag) {
+  static async updateTag(
+    tag: Tag,
+  ): Promise<MessagePayload['UPDATE_TAG']['out']> {
     return chrome.runtime.sendMessage(
       typedMessage('UPDATE_TAG', 'in', {
         tag,
@@ -86,7 +92,9 @@ export default class Services {
     );
   }
 
-  static async deleteTag(tagId: Tag['id']) {
+  static async deleteTag(
+    tagId: Tag['id'],
+  ): Promise<MessagePayload['DELETE_TAG']['out']> {
     return chrome.runtime.sendMessage(
       typedMessage('DELETE_TAG', 'in', {
         tagId,
@@ -94,7 +102,10 @@ export default class Services {
     );
   }
 
-  static async setTag(videoId: Video['videoId'], tagId?: Tag['id']) {
+  static async setTag(
+    videoId: Video['videoId'],
+    tagId?: Tag['id'],
+  ): Promise<MessagePayload['SET_VIDEO_TAG']['out']> {
     return chrome.runtime.sendMessage(
       typedMessage('SET_VIDEO_TAG', 'in', {
         videoId,
@@ -113,7 +124,10 @@ export default class Services {
     );
   }
 
-  static async playVideo(tabId: number, time: number) {
+  static async playVideo(
+    tabId: number,
+    time: number,
+  ): Promise<MessagePayload['CONTENT/PLAY_VIDEO_AT']['out']> {
     return chrome.tabs.sendMessage(
       tabId,
       typedMessage('CONTENT/PLAY_VIDEO_AT', 'in', {
@@ -122,7 +136,9 @@ export default class Services {
     );
   }
 
-  static async deleteVideo(videoId: Video['videoId']) {
+  static async deleteVideo(
+    videoId: Video['videoId'],
+  ): Promise<MessagePayload['DELETE_VIDEO']['out']> {
     return chrome.runtime.sendMessage(
       typedMessage('DELETE_VIDEO', 'in', {
         videoId,
@@ -130,7 +146,9 @@ export default class Services {
     );
   }
 
-  static async deleteVideoBookmarks(videoId: Video['videoId']) {
+  static async deleteVideoBookmarks(
+    videoId: Video['videoId'],
+  ): Promise<MessagePayload['DELETE_BOOKMARKS_BY_VIDEO_ID']['out']> {
     return chrome.runtime.sendMessage(
       typedMessage('DELETE_BOOKMARKS_BY_VIDEO_ID', 'in', {
         videoId,
@@ -138,7 +156,9 @@ export default class Services {
     );
   }
 
-  static async deleteBookmark(bookmarkId: Bookmark['id']) {
+  static async deleteBookmark(
+    bookmarkId: Bookmark['id'],
+  ): Promise<MessagePayload['DELETE_BOOKMARK']['out']> {
     return chrome.runtime.sendMessage(
       typedMessage('DELETE_BOOKMARK', 'in', {
         bookmarkId,
@@ -146,15 +166,17 @@ export default class Services {
     );
   }
 
-  static async resetData() {
+  static async resetData(): Promise<MessagePayload['RESET']['out']> {
     return chrome.runtime.sendMessage(typedMessage('RESET', 'in', {}));
   }
 
-  static async exportData() {
+  static async exportData(): Promise<MessagePayload['EXPORT_DATA']['out']> {
     return chrome.runtime.sendMessage(typedMessage('EXPORT_DATA', 'in', {}));
   }
 
-  static async importData(data: Backup) {
+  static async importData(
+    data: Backup,
+  ): Promise<MessagePayload['IMPORT_DATA']['out']> {
     return chrome.runtime.sendMessage(
       typedMessage('IMPORT_DATA', 'in', {
         data,

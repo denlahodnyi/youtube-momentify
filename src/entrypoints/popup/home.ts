@@ -1,10 +1,8 @@
 import type { Bookmark, Tag, Video } from '@/api/index.js';
-import { colors } from './popupUtils.js';
+import { COLORS as colors, TAG_TITLE_CONSTRAINS } from '@/shared';
 import type Services from './services.js';
 import type BookmarkComponent from './bookmark.js';
 import type VideoComponent from './video.js';
-
-const TAG_TITLE_CONSTRAINS = { min: 1, max: 20 };
 
 interface State {
   videoId: null | Video['videoId'];
@@ -104,7 +102,7 @@ export default class HomePage {
 
   async fetchTags() {
     const result = await this.services.getTags();
-    if (result.success) {
+    if (result.success && result.normalized) {
       this.state.tags.byId = new Map(result.list.byId);
       this.state.tags.ids = result.list.ids;
     }
@@ -754,13 +752,6 @@ export default class HomePage {
             });
 
             if (result.success) {
-              // const bookmark = this.state.bookmarks.byId.get(
-              //   this.state.colorPickerBookmarkId,
-              // );
-              // this.state.bookmarks.byId.set(bookmark.id, {
-              //   ...bookmark,
-              //   color: (e.target as HTMLInputElement).value,
-              // });
               this.state.bookmarks.byId.set(
                 result.bookmark.id,
                 result.bookmark,

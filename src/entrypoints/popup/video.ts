@@ -1,6 +1,6 @@
+import { Video as VideoEntity, type Bookmark } from '@/api/index.js';
 import { getVideoThumbnailUrl } from './popupUtils.js';
 import type Services from './services.js';
-import { Video as VideoEntity, type Bookmark } from '@/api/index.js';
 
 export default class Video {
   dom: HTMLElement;
