@@ -81,7 +81,7 @@ export interface MessagePayload {
   };
   GET_VIDEOS_WITH_BOOKMARKS: {
     in: {
-      topmostVideoId?: Video['videoId'];
+      topmostVideoId?: Video['videoId'] | null;
       includeBookmarks?: boolean;
       normalized?: boolean;
     };

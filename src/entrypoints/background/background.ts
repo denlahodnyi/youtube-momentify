@@ -925,7 +925,7 @@ function getVideosWithBookmarks<
 >(
   db: IDBDatabase,
   options: {
-    topVideoId?: Video['videoId'];
+    topVideoId?: Video['videoId'] | null;
     includeBookmarks?: TInclBM;
     normalized?: TNorm;
   } = {},

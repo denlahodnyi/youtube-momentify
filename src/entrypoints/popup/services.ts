@@ -12,7 +12,7 @@ const chrome = browser;
 
 export default class Services {
   static async getVideos(
-    topmostVideoId?: Video['videoId'],
+    topmostVideoId?: Video['videoId'] | null,
   ): Promise<MessagePayload['GET_VIDEOS_WITH_BOOKMARKS']['out']> {
     return chrome.runtime.sendMessage(
       typedMessage('GET_VIDEOS_WITH_BOOKMARKS', 'in', {
